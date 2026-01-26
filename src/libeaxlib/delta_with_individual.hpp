@@ -7,14 +7,16 @@ namespace eax {
 template <individual_concept T>
 class DeltaWithIndividual {
 public:
+    DeltaWithIndividual(DeltaWithIndividual&& other) = default;
+    DeltaWithIndividual& operator=(DeltaWithIndividual&& other) = default;
     /**
      * @brief コンストラクタ
      * @param individual ベースの個体
      * @param delta 変更内容
      * @throws std::invalid_argument ベースの個体がdeltaのベース個体と一致しない場合
      */
-    DeltaWithIndividual(const T& individual, const CrossoverDelta& delta)
-        : individual(individual), delta(delta) {
+    DeltaWithIndividual(T& individual, CrossoverDelta& delta)
+        : individual_ptr(&individual), delta(delta) {
         if (!delta.is_base_individual(individual)) {
             throw std::invalid_argument("DeltaWithIndividual: The provided individual does not match the base individual of the delta.");
         }
@@ -26,8 +28,8 @@ public:
      * @param delta 変更内容
      * @throws std::invalid_argument ベースの個体がdeltaのベース個体と一致しない場合
      */
-    DeltaWithIndividual(const T& individual, const CrossoverDelta&& delta)
-        : individual(individual), delta(std::move(delta)) {
+    DeltaWithIndividual(T& individual, CrossoverDelta&& delta)
+        : individual_ptr(&individual), delta(std::move(delta)) {
         if (!this->delta.is_base_individual(individual)) {
             throw std::invalid_argument("DeltaWithIndividual: The provided individual does not match the base individual of the delta.");
         }
@@ -38,18 +40,19 @@ public:
      * @param individual ベースの個体
      */
     DeltaWithIndividual(const T& individual)
-        : individual(individual), delta() {}
+        : individual_ptr(&individual), delta() {}
+
     
 
     void apply_to(T& target_individual) const {
         if (!delta.is_base_individual(target_individual)) {
-            target_individual = individual; // ベース個体でなければコピーする
+            target_individual = *individual_ptr; // ベース個体でなければコピーする
         }
 
         delta.apply_to(target_individual);
     }
 
-    const T& individual;
-    const CrossoverDelta delta;
+    const T* individual_ptr;
+    CrossoverDelta delta;
 };
 }

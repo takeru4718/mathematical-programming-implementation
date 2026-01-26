@@ -25,6 +25,17 @@
             "cwd": "${workspaceFolder}/debug/eax_stsp",
             "environment": [],
             "externalConsole": false,
+        },
+        {
+            "name": "debug eax_tabu",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/debug/eax_tabu",
+            "args": ["--file", "att532.tsp","--ps","200"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/debug/eax_tabu",
+            "environment": [],
+            "externalConsole": false,
         }
     ]
 }

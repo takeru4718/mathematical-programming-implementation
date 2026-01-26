@@ -8,6 +8,7 @@
 
 #include "checksumed.hpp"
 #include "crossover_delta.hpp"
+#include "delta_with_individual.hpp"
 
 namespace eax {
 
@@ -29,8 +30,16 @@ namespace eax {
             return distance_;
         }
         std::vector<size_t> to_path() const;
-        Individual& operator=(const CrossoverDelta& child) {
-            prev_diff = child;
+        // Individual& operator=(const DeltaWithIndividual& child) {
+        //     prev_diff = child;
+        //     return *this;
+        // }
+
+        template <typename T = Individual>
+            requires std::is_same_v<T, Individual>
+        Individual& operator=(eax::DeltaWithIndividual<T>&& delta_view) {
+            delta_view.apply_to(*this);
+            prev_diff = delta_view.delta;
             return *this;
         }
         

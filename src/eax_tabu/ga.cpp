@@ -11,6 +11,7 @@
 #include "distance_preserving_evaluator.hpp"
 
 #include "generational_model.hpp"
+#include "delta_with_individual.hpp"
 
 namespace eax {
 std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> execute_ga(
@@ -28,9 +29,29 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     eax::EAX_tabu_Rand eax_tabu_rand(object_pools);
     eax::EAX_tabu_N_AB eax_tabu_n_ab(object_pools);
     eax::EAX_tabu_UNIFORM eax_tabu_uniform(object_pools);
-    auto crossover_func = [&eax_tabu_rand, &eax_tabu_n_ab, &eax_tabu_uniform](const Individual& parent1, const Individual& parent2,
+    auto crossover_func = [&eax_tabu_rand, &eax_tabu_n_ab, &eax_tabu_uniform](Individual& parent1, const Individual& parent2,
                                 Context& context) {
         auto& env = context.env;
+
+        //ERモデルのとき親1と親2のタブーリストを統合
+        std::vector<std::pair<size_t, size_t>> merged_tabu_edges;
+        const std::vector<std::pair<size_t, size_t>>* tabu_edges_ptr;
+
+        if (env.generational_model_type == GenerationalModelType::ER) {
+            // 親1と親2のタブーリストを統合
+            merged_tabu_edges.reserve(parent1.get_tabu_edges().size() + parent2.get_tabu_edges().size());
+            merged_tabu_edges.insert(merged_tabu_edges.end(), 
+                                     parent1.get_tabu_edges().begin(), 
+                                     parent1.get_tabu_edges().end());
+            merged_tabu_edges.insert(merged_tabu_edges.end(), 
+                                     parent2.get_tabu_edges().begin(), 
+                                     parent2.get_tabu_edges().end());
+            tabu_edges_ptr = &merged_tabu_edges;
+        } else {
+            // MGGモデルのときは親1のタブーリストのみ
+            tabu_edges_ptr = &parent1.get_tabu_edges();
+        }
+
         struct {
             eax::EAX_tabu_Rand& eax_tabu_rand;
             eax::EAX_tabu_N_AB& eax_tabu_n_ab;
@@ -38,35 +59,34 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             const Individual& parent1;
             const Individual& parent2;
             Context& context;
+            const std::vector<std::pair<size_t, size_t>>* tabu_edges_ptr;
+
             auto operator()(const EAX_Rand_tag&) {
-                return eax_tabu_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, {}, {}, parent1.get_tabu_edges());
+                return eax_tabu_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, {}, {}, std::forward_as_tuple(*tabu_edges_ptr));
             }
             
             auto operator()(const EAX_n_AB_tag& n_ab) {
-                return eax_tabu_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n(), {}, parent1.get_tabu_edges());
+                return eax_tabu_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, std::forward_as_tuple(n_ab.get_n()), {}, std::forward_as_tuple(*tabu_edges_ptr));
             }
             
             auto operator()(const EAX_UNIFORM_tag& uniform) {
-                return eax_tabu_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, uniform.get_ratio(), {}, parent1.get_tabu_edges());
+                return eax_tabu_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, std::forward_as_tuple(uniform.get_ratio()), {}, std::forward_as_tuple(*tabu_edges_ptr));
             }
-        } visitor {eax_tabu_rand, eax_tabu_n_ab, eax_tabu_uniform, parent1, parent2, context};
+        } visitor {eax_tabu_rand, eax_tabu_n_ab, eax_tabu_uniform, parent1, parent2, context, tabu_edges_ptr};
         
-        return std::visit(visitor, env.eax_type);
+        auto deltas = std::visit(visitor, env.eax_type);
+
+        std::vector<eax::DeltaWithIndividual<Individual>> children;
+        children.reserve(deltas.size());
+        for(auto& delta:deltas){
+            children.emplace_back(parent1,delta);
+        }
+        return children;
     };
 
     // 適応度関数
-    auto calc_fitness_lambda = [](const eax::CrossoverDelta& child, Context& context) {
-        auto& env = context.env;
-        switch (env.selection_type) {
-            case eax::SelectionType::Greedy:
-                return eax::eval::delta::Greedy(child);
-            case eax::SelectionType::Ent:
-                return eax::eval::delta::Entropy(child, context.pop_edge_counts, env.population_size);
-            case eax::SelectionType::DistancePreserving:
-                return eax::eval::delta::DistancePreserving(child, context.pop_edge_counts);
-            default:
-                throw std::runtime_error("Unknown selection type");
-        }
+    auto calc_fitness_lambda = [](const eax::DeltaWithIndividual<Individual>&child,Context& context) {
+        return 1.0 / (child.delta.get_delta_distance() + child.individual_ptr->get_distance());
     };
     
     // 更新処理関数
@@ -167,12 +187,15 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     } post_process;
 
     // 世代交代処理
-    eax::GenerationalStep generational_step(calc_fitness_lambda, crossover_func);
-    
-    // GA実行オブジェクト
-    eax::GenerationalModel genetic_algorithm(generational_step, update_func, logging, post_process);
-
-    return genetic_algorithm.execute(population, context, context.current_generation);
+    if (context.env.generational_model_type == eax::GenerationalModelType::ER) {
+        eax::GenerationalStepER generational_step_er(calc_fitness_lambda, crossover_func);
+        eax::GenerationalModel genetic_algorithm(generational_step_er, update_func, logging, post_process);
+        return genetic_algorithm.execute(population, context, context.current_generation);
+    } else {
+        // eax::GenerationalStep generational_step(calc_fitness_lambda, crossover_func);
+        // eax::GenerationalModel genetic_algorithm(generational_step, update_func, logging, post_process);
+        // return genetic_algorithm.execute(population, context, context.current_generation);
+    }
 }
 
 Context create_context(const std::vector<Individual>& initial_population, Environment const& env) {

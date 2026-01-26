@@ -8,6 +8,7 @@ namespace eax {
     Individual::Individual(const std::vector<size_t>& path, const std::vector<std::vector<int64_t>>& adjacency_matrix, size_t tabu_range) {
         this->tabu_range = tabu_range;
         tabu_edges.resize(tabu_range);
+        distance_ = 0;  // 距離を0で初期化
 
         doubly_linked_list.resize(path.size());
         for (size_t i = 1; i < path.size() - 1; ++i) {
@@ -87,7 +88,7 @@ namespace eax {
         CrossoverDelta child = std::move(prev_diff);
         prev_diff = CrossoverDelta();
         // グラフの更新
-        child.apply_to(*this);
+        // child.apply_to(*this);
         // タブーリストの更新
         tabu_edges[current_tabu_index].clear();
         current_tabu_index = (current_tabu_index + 1) % tabu_range;

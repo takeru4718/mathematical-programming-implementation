@@ -15,6 +15,11 @@
 #include "eax_uniform.hpp"
 
 namespace eax {
+    enum class GenerationalModelType {
+        MGG,
+        ER,
+    };
+
     enum class SelectionType {
         Greedy,
         Ent,
@@ -31,6 +36,7 @@ namespace eax {
         SelectionType selection_type;
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
+        GenerationalModelType generational_model_type = GenerationalModelType::MGG;
     };
 
     struct Context {

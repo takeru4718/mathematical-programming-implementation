@@ -43,9 +43,9 @@ struct Arguments {
     // １度の交叉で生成する子の数
     size_t num_children = 30;
     // 評価関数の種類
-    std::string selection_type_str = "ent"; // "greedy", "ent", or "distance"
+    std::string selection_type_str = "greedy"; // "greedy", "ent", or "distance"
     // 交叉手法
-    std::string eax_type_str = "EAX_1_AB";
+    std::string eax_type_str = "EAX_UNIFORM"; // "EAX_Rand", "EAX_N_AB", or "EAX_UNIFORM"
     // 出力ファイル名
     std::string output_file_name = "result.md";
     // ログファイル名
@@ -60,6 +60,8 @@ struct Arguments {
     std::string cache_directory = ".";
     // タブーリストの存続世代数
     size_t tabu_list_duration = 5;
+    // 世代交代モデルの種類
+    std::string generational_model_type_str = "ER"; // "MGG" or "ER"
 };
 
 void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_algorithm::TerminationReason reason)
@@ -138,6 +140,15 @@ void execute_normal(const Arguments& args)
     }
     eax::eax_type_t eax_type = eax::create_eax_tag_from_string<eax::eax_type_t>(args.eax_type_str);
 
+    eax::GenerationalModelType generational_model_type = eax::GenerationalModelType::MGG;
+    if (args.generational_model_type_str == "MGG") {
+        generational_model_type = eax::GenerationalModelType::MGG;
+    } else if (args.generational_model_type_str == "ER") {
+        generational_model_type = eax::GenerationalModelType::ER;
+    } else {
+        throw std::runtime_error("Unknown generational model type '" + args.generational_model_type_str + "'. Options are 'MGG' or 'ER'.");
+    }
+
     tsp::TSP tsp = tsp::TSP_Loader::load_tsp(args.file_name);
     cout << "TSP Name: " << tsp.name << endl;
     cout << "Distance Type: " << tsp.distance_type << endl;
@@ -181,7 +192,7 @@ void execute_normal(const Arguments& args)
         cout << "Initial population created." << endl;
 
         // 環境
-        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type};
+        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, generational_model_type};
         eax::Context ga_context = eax::create_context(population, ga_env);
         
         cout << "Starting genetic algorithm..." << endl;
@@ -208,7 +219,7 @@ void execute_normal(const Arguments& args)
             cout << "Result saved to " << args.output_file_name << endl;
         }
         
-        cout << "Trial " << trial + 1 << " completed." << endl;
+        cout << "Trial " << trial + 1 << " completed. Final best_length: " << ga_context.best_length << endl;
     }
 }
 
@@ -355,6 +366,12 @@ int main(int argc, char* argv[])
     argspec_tabu_list_duration.add_argument_name("--tabu-duration");
     argspec_tabu_list_duration.set_description("--tabu-duration <number> \t:Number of generations an edge remains in the tabu list (default: 5).");
     parser.add_argument(argspec_tabu_list_duration);
+
+    mpi::ArgumentSpec generational_model_spec(args.generational_model_type_str);
+    generational_model_spec.add_argument_name("--generational-model");
+    generational_model_spec.add_argument_name("--gm");  // 短縮形
+    generational_model_spec.set_description("--generational-model <type> \t:Generational model type. Options are 'MGG' (default) or 'ER'.");
+    parser.add_argument(generational_model_spec);
     
     bool help_requested = false;
     mpi::ArgumentSpec help_spec(help_requested);
