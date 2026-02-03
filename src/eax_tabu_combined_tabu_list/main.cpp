@@ -21,10 +21,10 @@
 #include "elitist_recombination.hpp"
 #include "tsp_loader.hpp"
 #include "population_initializer.hpp"
-#include "generational_model.hpp"
 #include "context.hpp"
 #include "ga.hpp"
 #include "two_opt.hpp"
+#include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
 #include <time.h>
 #include "eax_tabu.hpp"
