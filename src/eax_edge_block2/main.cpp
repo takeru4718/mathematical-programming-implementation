@@ -29,9 +29,7 @@
 #include "context.hpp"
 #include "ga.hpp"
 #include "two_opt.hpp"
-#include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
-#include "eax_tag.hpp"
 #include <time.h>
 
 struct Arguments {
@@ -47,22 +45,22 @@ struct Arguments {
     size_t num_children = 30;
     // 評価関数の種類
     std::string selection_type_str = "ent"; // "greedy", "ent", or "distance"
-    // 交叉手法
-    std::string eax_type_str = "EAX_1_AB";
     // 出力ファイル名
     std::string output_file_name = "result.md";
-    // ログファイル名
+    // logファイル名
     std::string log_file_name = "";
     // キャッシュディレクトリ
     std::string cache_directory = ".";
 };
 
-void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_algorithm::TerminationReason reason)
+void print_result(const eax::Context& context, std::ostream& os)
 {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
-        os << "| TSP Name | Population Size | Selection Type | Children per Crossover | Seed | Best Length | Generation Reached Best | Total Generations | Time (s) | Termination Reason |" << std::endl;
-        os << "|----------|-----------------|----------------|------------------------|------|-------------|-------------------------|-------------------|----------|--------------------|" << std::endl;
+        os << "# EAX Genetic Algorithm Results" << std::endl;
+        os << std::endl;
+        os << "| TSP Name | Population Size | Selection Type | Children per Crossover | Seed | Best Length | Generation Reached Best | Total Generations | Time (s) |" << std::endl;
+        os << "|----------|-----------------|----------------|-----------------------|------|-------------|------------------------|-------------------|----------|" << std::endl;
     }
     
     os << "| " << context.env.tsp.name << " | " << context.env.population_size << " | "; 
@@ -81,26 +79,7 @@ void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_al
             break;
     }
     os << " | " << context.env.num_children << " | " << context.env.random_seed << " | " << context.best_length << " | " << context.generation_of_reached_best << " | "
-                << context.final_generation << " | " << context.elapsed_time << " |";
-    switch (reason) {
-        case mpi::genetic_algorithm::TerminationReason::Converged:
-            os << " Converged";
-            break;
-        case mpi::genetic_algorithm::TerminationReason::MaxGenerations:
-            os << " Max Generations Reached";
-            break;
-        case mpi::genetic_algorithm::TerminationReason::TimeLimit:
-            os << " Time Limit Reached";
-            break;
-        case mpi::genetic_algorithm::TerminationReason::Stagnation:
-            os << " Stagnation";
-            break;
-        default:
-            os << " Other";
-            break;
-    
-    }
-    os << " |" << std::endl;
+                << context.final_generation << " | " << context.elapsed_time << " |" << std::endl;
 
 }
 
@@ -132,10 +111,9 @@ void execute_normal(const Arguments& args)
     mt19937 rng(args.seed);
     
     // neighbor_range
-    size_t near_range = 20; // 近傍範囲
+    size_t near_range = 50; // 近傍範囲
     // 2opt
     eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
-    eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     // 初期集団生成器
     tsp::PopulationInitializer population_initializer(args.population_size, tsp.city_count);
     
@@ -156,13 +134,6 @@ void execute_normal(const Arguments& args)
             // 2-optを適用
             two_opt.apply(path, local_seed);
         });
-
-        //木じゃないsoft2optを適用する場合は以下のコメントを外す
-        // vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
-        //     // 2-optを適用
-        //     soft_two_opt.apply(path);
-        // });
-
         vector<eax::Individual> population;
         population.reserve(initial_paths.size());
         for (const auto& path : initial_paths) {
@@ -170,26 +141,22 @@ void execute_normal(const Arguments& args)
         }
 
         cout << "Initial population created." << endl;
-        
-        eax::eax_type_t eax_type;
-
-        eax_type = eax::create_eax_tag_from_string<eax::eax_type_t>(args.eax_type_str);
 
         // 環境
-        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type};
+        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed};
         eax::Context ga_context{ga_env, population};
         
         cout << "Starting genetic algorithm..." << endl;
         // 計測開始
-        auto result = eax::execute_ga(population, ga_context, args.log_file_name);
-        auto& [termination_reason, result_population] = result;
+        eax::execute_ga(population, ga_context, args.log_file_name);
         
         // 結果を出力
         ofstream result_file(args.output_file_name, ios::app);
         if (!result_file.is_open()) {
             throw std::runtime_error("Failed to open result file: " + args.output_file_name);
         }
-        print_result(ga_context, result_file, termination_reason);
+
+        print_result(ga_context, result_file);
         result_file.close();
         cout << "Result saved to " << args.output_file_name << endl;
         
@@ -236,24 +203,19 @@ int main(int argc, char* argv[])
                                    "Options are 'greedy' for Greedy Selection, 'ent' for Entropy Selection (default), and 'distance' for Distance-preserving Selection.");
     parser.add_argument(selection_spec);
     
-    mpi::ArgumentSpec eax_type_spec(args.eax_type_str);
-    eax_type_spec.add_argument_name("--eax-type");
-    eax_type_spec.set_description("--eax-type <type> \t:EAX crossover type. Options are 'EAX_1_AB' (default), 'EAX_Rand', 'EAX_UNIFORM', and 'EAX_Block2'. EAX_{N}_AB is also supported, where {N} is a positive integer.");
-    parser.add_argument(eax_type_spec);
-    
     mpi::ArgumentSpec output_spec(args.output_file_name);
     output_spec.add_argument_name("--output");
     output_spec.set_description("--output <filename> \t:Output file name (default: result.md).");
     parser.add_argument(output_spec);
 
-    mpi::ArgumentSpec log_file_name_spec(args.log_file_name);
-    log_file_name_spec.add_argument_name("--log");
-    log_file_name_spec.set_description("--log <filename> \t:Log file name.");
-    parser.add_argument(log_file_name_spec);
+    mpi::ArgumentSpec log_spec(args.log_file_name);
+    log_spec.add_argument_name("--log");
+    log_spec.set_description("--log <filename> \t:Log file name.");
+    parser.add_argument(log_spec);
     
     mpi::ArgumentSpec cache_dir_spec(args.cache_directory);
     cache_dir_spec.add_argument_name("--cache-dir");
-    cache_dir_spec.set_description("-;-cache-dir <directory> \t:Directory to store cache files of initial populations (default: current directory).");
+    cache_dir_spec.set_description("--cache-dir <directory> \t:Cache directory for initial population files (default: current directory).");
     parser.add_argument(cache_dir_spec);
     
     bool help_requested = false;

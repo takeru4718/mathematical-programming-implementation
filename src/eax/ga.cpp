@@ -14,6 +14,7 @@
 #include "distance_preserving_evaluator.hpp"
 #include "generational_change_model.hpp"
 #include "nagata_generation_change_model.hpp"
+#include "eaxutils.hpp"
 
 
 namespace eax {
@@ -95,13 +96,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
                 auto delta_H = eax::calc_delta_entropy(delta, context.pop_edge_counts, context.env.population_size);
                 context.entropy += delta_H;
 
-                for (const auto& mod : delta.get_modifications()) {
-                    size_t v1 = mod.edge1.first;
-                    size_t v2 = mod.edge1.second;
-                    size_t new_v2 = mod.new_v2;
-                    context.pop_edge_counts[v1][v2] -= 1;
-                    context.pop_edge_counts[v1][new_v2] += 1;
-                }
+                context.pop_edge_counts.apply_crossover_delta(delta);
             }
         }
 
@@ -137,7 +132,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     std::ofstream log_file_stream;
     if (!log_file_name.empty()) {
         log_file_stream.open(log_file_name);
-        log_file_stream << "Generation,BestLength,AverageLength,WorstLength,Entropy" << std::endl;
+        log_file_stream << "Generation,BestLength,AverageLength,WorstLength,Entropy,TimePerGeneration" << std::endl;
     }
 
     struct {
@@ -186,16 +181,14 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     // GA実行オブジェクト
     mpi::GenerationalChangeModel genetic_algorithm(generational_step, update_func, logging, post_process);
 
-    return genetic_algorithm.execute(population, context, context.current_generation);
-}
-
-Context create_context(const std::vector<Individual>& initial_population, Environment const& env) {
-    Context context;
-    context.env = env;
-
-    context.set_initial_edge_counts(initial_population);
-    context.random_gen = std::mt19937(env.random_seed);
-    return context;
+    auto result = genetic_algorithm.execute(population, context, context.current_generation);
+    
+    if (log_file_stream.is_open()) {
+        auto& [reason, final_population] = result;
+        print_best_solution(final_population, log_file_stream);
+    }
+    
+    return result;
 }
 
 }

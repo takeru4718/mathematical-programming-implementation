@@ -29,7 +29,6 @@
 #include "context.hpp"
 #include "ga.hpp"
 #include "two_opt.hpp"
-#include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
 #include "eax_tag.hpp"
 #include <time.h>
@@ -55,6 +54,8 @@ struct Arguments {
     std::string log_file_name = "";
     // キャッシュディレクトリ
     std::string cache_directory = ".";
+    // マージに用いる範囲の大きさ
+    size_t merge_range_size = 20;
 };
 
 void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_algorithm::TerminationReason reason)
@@ -132,10 +133,9 @@ void execute_normal(const Arguments& args)
     mt19937 rng(args.seed);
     
     // neighbor_range
-    size_t near_range = 20; // 近傍範囲
+    size_t near_range = 50; // 近傍範囲
     // 2opt
     eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
-    eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     // 初期集団生成器
     tsp::PopulationInitializer population_initializer(args.population_size, tsp.city_count);
     
@@ -156,13 +156,6 @@ void execute_normal(const Arguments& args)
             // 2-optを適用
             two_opt.apply(path, local_seed);
         });
-
-        //木じゃないsoft2optを適用する場合は以下のコメントを外す
-        // vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
-        //     // 2-optを適用
-        //     soft_two_opt.apply(path);
-        // });
-
         vector<eax::Individual> population;
         population.reserve(initial_paths.size());
         for (const auto& path : initial_paths) {
@@ -176,7 +169,7 @@ void execute_normal(const Arguments& args)
         eax_type = eax::create_eax_tag_from_string<eax::eax_type_t>(args.eax_type_str);
 
         // 環境
-        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type};
+        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, args.merge_range_size};
         eax::Context ga_context{ga_env, population};
         
         cout << "Starting genetic algorithm..." << endl;
@@ -253,8 +246,13 @@ int main(int argc, char* argv[])
     
     mpi::ArgumentSpec cache_dir_spec(args.cache_directory);
     cache_dir_spec.add_argument_name("--cache-dir");
-    cache_dir_spec.set_description("-;-cache-dir <directory> \t:Directory to store cache files of initial populations (default: current directory).");
+    cache_dir_spec.set_description("--cache-dir <directory> \t:Directory to store cache files of initial populations (default: current directory).");
     parser.add_argument(cache_dir_spec);
+    
+    mpi::ArgumentSpec merge_range_size_spec(args.merge_range_size);
+    merge_range_size_spec.add_argument_name("--merge-range-size");
+    merge_range_size_spec.set_description("--merge-range-size <size> \t:Range size used for adaptive merging (default: 20).");
+    parser.add_argument(merge_range_size_spec);
     
     bool help_requested = false;
     mpi::ArgumentSpec help_spec(help_requested);

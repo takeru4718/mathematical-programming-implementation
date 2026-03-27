@@ -3,20 +3,22 @@
 #include <fstream>
 
 #include "genetic_algorithm.hpp"
-#include "generational_change_model.hpp"
 
 #include "object_pools.hpp"
-#include "eax_normal.hpp"
 #include "eax_n_ab.hpp"
 #include "eax_block2.hpp"
 #include "eax_rand.hpp"
 #include "eax_uniform.hpp"
-#include "parent_reference_merger.hpp"
 #include "greedy_evaluator.hpp"
 #include "entropy_evaluator.hpp"
 #include "distance_preserving_evaluator.hpp"
+#include "generational_change_model.hpp"
 #include "nagata_generation_change_model.hpp"
 #include "eaxutils.hpp"
+#include "adaptive_range_merger.hpp"
+
+template <typename AssemblerBuilder>
+using Adaptive = eax::EAX_normal<AssemblerBuilder, eax::AdaptiveRangeMerger>;
 
 
 namespace eax {
@@ -30,38 +32,36 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     // オブジェクトプール
     eax::ObjectPools object_pools(context.env.tsp.city_count);
     
-    using ParentRef_N_AB = eax::EAX_normal<eax::N_AB_e_set_assembler_builder, eax::ParentReferenceMerger>;
-    using ParentRef_Rand = eax::EAX_normal<eax::Rand_e_set_assembler_builder, eax::ParentReferenceMerger>;
-    using ParentRef_UNIFORM = eax::EAX_normal<eax::uniform_e_set_assembler_builder, eax::ParentReferenceMerger>;
-    
     // 交叉関数
-    ParentRef_N_AB pr_n_ab(object_pools);
-    ParentRef_Rand pr_rand(object_pools);
-    ParentRef_UNIFORM pr_uniform(object_pools);
-
-    auto crossover_func = [&pr_n_ab, &pr_rand, &pr_uniform](const Individual& parent1, const Individual& parent2,
+    using Adaptive_N_AB = Adaptive<eax::N_AB_e_set_assembler_builder>;
+    using Adaptive_Rand = Adaptive<eax::Rand_e_set_assembler_builder>;
+    using Adaptive_UNIFORM = Adaptive<eax::uniform_e_set_assembler_builder>;
+    Adaptive_N_AB adaptive_n_ab(object_pools);
+    Adaptive_Rand adaptive_rand(object_pools);
+    Adaptive_UNIFORM adaptive_uniform(object_pools);
+    auto crossover_func = [&adaptive_n_ab, &adaptive_rand, &adaptive_uniform](const Individual& parent1, const Individual& parent2,
                                 Context& context) {
         auto& env = context.env;
         
         struct {
-            ParentRef_N_AB& pr_n_ab;
-            ParentRef_Rand& pr_rand;
-            ParentRef_UNIFORM& pr_uniform;
+            Adaptive_N_AB& eax_n_ab;
+            Adaptive_Rand& eax_rand;
+            Adaptive_UNIFORM& eax_uniform;
             const Individual& parent1;
             const Individual& parent2;
             Context& context;
             auto operator()(const eax::EAX_Rand_tag&) {
-                return pr_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, {}, context.reference_parents);
+                return eax_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, {}, std::forward_as_tuple(context.pop_edge_counts, context.env.range_size));
             }
 
             auto operator()(const eax::EAX_n_AB_tag& n_ab) {
-                return pr_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n(), context.reference_parents);
+                return eax_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n(), std::forward_as_tuple(context.pop_edge_counts, context.env.range_size));
             }
 
             auto operator()(const eax::EAX_UNIFORM_tag& uniform) {
-                return pr_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, uniform.get_ratio(), context.reference_parents);
+                return eax_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, uniform.get_ratio(), std::forward_as_tuple(context.pop_edge_counts, context.env.range_size));
             }
-        } visitor {pr_n_ab, pr_rand, pr_uniform, parent1, parent2, context};
+        } visitor {adaptive_n_ab, adaptive_rand, adaptive_uniform, parent1, parent2, context};
         
         return std::visit(visitor, env.eax_type);
     };
@@ -83,15 +83,10 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     
     // 更新処理関数
     struct {
-        std::chrono::system_clock::time_point timeout_time;
         mpi::genetic_algorithm::TerminationReason operator()(vector<Individual>& population, Context& context, size_t generation) {
             context.current_generation = generation;
 
             update_individual_and_edge_counts(population, context);
-            
-            if (std::chrono::system_clock::now() >= timeout_time) {
-                return mpi::genetic_algorithm::TerminationReason::TimeLimit;
-            }
 
             return continue_condition(population, context, generation);
         }
@@ -101,18 +96,9 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
                 auto delta = individual.apply_pending_delta();
                 auto delta_H = eax::calc_delta_entropy(delta, context.pop_edge_counts, context.env.population_size);
                 context.entropy += delta_H;
+
                 context.pop_edge_counts.apply_crossover_delta(delta);
             }
-
-            // 参照親の更新
-            // 参照親のインデックスをランダムに更新
-            auto& ref_indices = context.reference_parent_indices;
-            ref_indices.resize(context.env.population_size);
-            std::iota(ref_indices.begin(), ref_indices.end(), 0);
-            std::shuffle(ref_indices.begin(), ref_indices.end(), context.random_gen);
-            ref_indices.resize(context.env.num_reference_parents);
-            // 参照親の更新
-            context.update_reference_parents(population);
         }
 
         mpi::genetic_algorithm::TerminationReason continue_condition(const vector<Individual>& population, Context& context, size_t generation) {
@@ -136,7 +122,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             if (average_length - best_length < 0.001)
                 return mpi::genetic_algorithm::TerminationReason::Converged; // 収束条件
             
-            if (generation >= 10000)
+            if (generation >= 5000)
                 return mpi::genetic_algorithm::TerminationReason::MaxGenerations; // 最大世代数条件
             
             return mpi::genetic_algorithm::TerminationReason::NotTerminated;
@@ -147,19 +133,22 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     std::ofstream log_file_stream;
     if (!log_file_name.empty()) {
         log_file_stream.open(log_file_name);
-        log_file_stream << "Generation,BestLength,AverageLength,WorstLength,Entropy" << std::endl;
+        log_file_stream << "Generation,BestLength,AverageLength,WorstLength,Entropy,TimePerGeneration" << std::endl;
     }
 
     struct {
         std::ofstream& log_file_stream;
 
         void operator()([[maybe_unused]]const vector<Individual>& population, Context& context, size_t generation) {
+            double time_per_generation = 0.0;
+
             if (context.start_time.time_since_epoch().count() == 0) {
                 // 計測開始時刻が未設定なら、現在時刻を設定
                 context.start_time = std::chrono::system_clock::now();
             } else {
                 auto now = std::chrono::system_clock::now();
-                context.elapsed_time += std::chrono::duration<double>(now - context.start_time).count();
+                time_per_generation = std::chrono::duration<double>(now - context.start_time).count();
+                context.elapsed_time += time_per_generation;
                 context.start_time = now;
             }
 
@@ -177,7 +166,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             double worst_length = *worst_length_ptr;
             double average_length = std::accumulate(lengths.begin(), lengths.end(), 0.0) / lengths.size();
             
-            log_file_stream << generation << "," << best_length << "," << average_length << "," << worst_length << "," << context.entropy << std::endl;
+            log_file_stream << generation << "," << best_length << "," << average_length << "," << worst_length << "," << context.entropy << "," << time_per_generation << std::endl;
         }
     } logging {log_file_stream};
     
@@ -202,5 +191,5 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     
     return result;
 }
-    
+
 }

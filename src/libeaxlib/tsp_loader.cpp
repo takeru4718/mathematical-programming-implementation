@@ -13,26 +13,46 @@ namespace tsp {
             throw std::runtime_error("Could not open the file: " + file_name);
         }
 
+        auto trim = [](std::string& s) {
+            s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
+        };
+
         std::string line;
         while (std::getline(file, line)) {
-            if (line.find("NAME") != std::string::npos) {
-                std::istringstream iss(line);
-                std::string name_label;
-                std::string colon;
-                iss >> name_label >> colon >> tsp.name;
-            } else if (line.find("DIMENSION") != std::string::npos) {
-                std::istringstream iss(line);
-                std::string dimension_label;
-                std::string colon;
-                iss >> dimension_label >> colon >> tsp.city_count;
-
-                tsp.adjacency_matrix.resize(tsp.city_count, std::vector<int64_t>(tsp.city_count, 0.0));
-            } else if (line.find("EDGE_WEIGHT_TYPE") != std::string::npos) {
-                std::istringstream iss(line);
-                std::string edge_weight_type_label;
-                std::string colon;
-                iss >> edge_weight_type_label >> colon >> tsp.distance_type;
-            } else if (line.find("NODE_COORD_SECTION") != std::string::npos) {
+            if (line.starts_with("NAME")) {
+                size_t colon_pos = line.find(':');
+                if (colon_pos == std::string::npos) {
+                    throw std::runtime_error("Invalid line format for NAME: " + line);
+                }
+                auto name_part = line.substr(colon_pos + 1);
+                // 前後の空白をトリム
+                trim(name_part);
+                tsp.name = name_part;
+            } else if (line.starts_with("DIMENSION")) {
+                size_t colon_pos = line.find(':');
+                if (colon_pos == std::string::npos) {
+                    throw std::runtime_error("Invalid line format for DIMENSION: " + line);
+                }
+                auto dimension_part = line.substr(colon_pos + 1);
+                // 前後の空白をトリム
+                trim(dimension_part);
+                try {
+                    tsp.city_count = std::stoul(dimension_part);
+                } catch (const std::exception& e) {
+                    throw std::runtime_error("Invalid number format for DIMENSION: " + dimension_part);
+                }
+                tsp.adjacency_matrix.resize(tsp.city_count, std::vector<int64_t>(tsp.city_count, 0));
+            } else if (line.starts_with("EDGE_WEIGHT_TYPE")) {
+                size_t colon_pos = line.find(':');
+                if (colon_pos == std::string::npos) {
+                    throw std::runtime_error("Invalid line format for EDGE_WEIGHT_TYPE: " + line);
+                }
+                auto type_part = line.substr(colon_pos + 1);
+                // 前後の空白をトリム
+                trim(type_part);
+                tsp.distance_type = type_part;
+            } else if (line.starts_with("NODE_COORD_SECTION")) {
                 break; // Start reading the adjacency matrix
             }
         }
@@ -61,11 +81,9 @@ namespace tsp {
             throw std::runtime_error("Number of cities does not match the specified dimension.");
         }
         
-        tsp.NN_list.resize(tsp.city_count);
         
         // Fill the adjacency matrix based on the coordinates
         for (size_t i = 0; i < tsp.city_count; ++i) {
-            tsp.NN_list[i].reserve(tsp.city_count - 1); // Reserve space for neighbors
             for (size_t j = 0; j < tsp.city_count; ++j) {
                 if (i == j) {
                     tsp.adjacency_matrix[i][j] = 0; // Distance to itself is 0
@@ -83,12 +101,29 @@ namespace tsp {
                     } else {
                         throw std::runtime_error("Unsupported distance type: " + tsp.distance_type);
                     }
-                    tsp.NN_list[i].emplace_back(tsp.adjacency_matrix[i][j], j);
                 }
             }
-            std::sort(tsp.NN_list[i].begin(), tsp.NN_list[i].end());
         }
-        
+
+        // Construct the nearest neighbor list
+        tsp.NN_list.resize(tsp.city_count);
+        for (size_t i = 0; i < tsp.city_count; ++i) {
+            tsp.NN_list[i].resize(tsp.city_count - 1);
+
+            for (size_t j = 0; j < i; ++j) {
+                tsp.NN_list[i][j] = j;
+            }
+            for (size_t j = i + 1; j < tsp.city_count; ++j) {
+                tsp.NN_list[i][j - 1] = j;
+            }
+        }
+
+        for (size_t i = 0; i < tsp.city_count; ++i) {
+            std::sort(tsp.NN_list[i].begin(), tsp.NN_list[i].end(),
+                      [&tsp, i](size_t a, size_t b) {
+                          return tsp.adjacency_matrix[i][a] < tsp.adjacency_matrix[i][b];
+                      });
+        }
 
         file.close();
         return tsp;
