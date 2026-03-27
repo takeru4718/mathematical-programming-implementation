@@ -594,6 +594,63 @@ namespace {
         
     }
 
+    void apply_soft_2opt_tree(
+        std::vector<size_t>& path,
+        const std::vector<std::vector<int64_t>>& distance_matrix,
+        const std::vector<std::vector<std::pair<int64_t, size_t>>>& nearest_neighbors,
+        size_t near_range
+    ){
+        //平衡2分木を構築
+        const size_t n = path.size();
+        PathTree tree(path);
+
+        //デバッグ用
+        //int i = 0;
+        int64_t best_improve = 1;
+        while(best_improve > 0){
+            // std::cout << "i: " << i << std::endl;
+            //i++;
+
+            best_improve = 0;
+            size_t best_u1 = 0, best_v2 = 0;
+
+            size_t start = path[0];
+            size_t u1 = start;
+            do{
+                size_t v1 = tree.get_next(u1);
+                size_t deg = std::min(near_range, nearest_neighbors[u1].size());
+                for(size_t d = 0; d < deg; d++){
+                    size_t u2 = nearest_neighbors[u1][d].second;
+                    size_t v2 = tree.get_next(u2);
+
+                    int64_t length_diff = (distance_matrix[u1][v1] + distance_matrix[u2][v2]) - (distance_matrix[u1][u2] + distance_matrix[v1][v2]);
+                    if(length_diff > best_improve){
+                        best_improve = length_diff;
+                        best_u1 = u1;
+                        best_v2 = v2;
+                    }
+                }
+
+                u1 = v1;
+            }while(u1 != start);
+
+            // if(i%100 == 0){
+            //     std::cout << "best_improve: " << best_improve << std::endl;
+            // }
+            if(best_improve > 0){
+                tree.reverse_range(best_u1, best_v2);
+            } else {
+                break; //改善なし
+            }
+        }
+
+        //最後に木を走査してパスを更新
+        path.clear();
+        tree.for_each([&path](Node& node){
+            path.push_back(node.city);
+        });
+    }
+
 }
 
 namespace eax {
@@ -628,6 +685,8 @@ void TwoOpt::apply(std::vector<size_t>& path, std::mt19937::result_type seed)
     } else {
         apply_neighbor_2opt(path, distance_matrix, nearest_neighbors, near_cities, near_range, seed);
     }
+
+    //apply_soft_2opt_tree(path, distance_matrix, nearest_neighbors, near_range);
 
     auto end_time = std::chrono::high_resolution_clock::now();
     time_a += std::chrono::duration<double>(end_time - start_time).count();

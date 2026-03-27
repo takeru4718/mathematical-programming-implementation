@@ -5,21 +5,21 @@
 
 PROJECT_NAME=$(subst $(ROOT_DIR)/src/,,$(shell pwd))
 SRCS=$(wildcard *.cpp)
-OBJS=$(patsubst %.cpp,$(ROOT_DIR)/temp/$(PROJECT_NAME)/%.o,$(SRCS))
-DEBUG_OBJS=$(patsubst %.cpp,$(ROOT_DIR)/temp/debug/$(PROJECT_NAME)/%.o,$(SRCS))
-PROF_OBJS=$(patsubst %.cpp,$(ROOT_DIR)/temp/prof/$(PROJECT_NAME)/%.o,$(SRCS))
+OBJS=$(patsubst %.cpp,$(TEMPDIR)/$(PROJECT_NAME)/%.o,$(SRCS))
+DEBUG_OBJS=$(patsubst %.cpp,$(TEMPDIR)/debug/$(PROJECT_NAME)/%.o,$(SRCS))
+PROF_OBJS=$(patsubst %.cpp,$(TEMPDIR)/prof/$(PROJECT_NAME)/%.o,$(SRCS))
 
-TARGET=$(ROOT_DIR)/bin/$(PROJECT_NAME).a
-DEBUG_TARGET=$(ROOT_DIR)/bin/debug/$(PROJECT_NAME).a
-PROF_TARGET=$(ROOT_DIR)/bin/prof/$(PROJECT_NAME).a
+TARGET=$(BINDIR)/$(PROJECT_NAME).a
+DEBUG_TARGET=$(BINDIR)/debug/$(PROJECT_NAME).a
+PROF_TARGET=$(BINDIR)/prof/$(PROJECT_NAME).a
 
 OBJS_DEPEND=$(OBJS:.o=.d)
 DEBUG_OBJS_DEPEND=$(DEBUG_OBJS:.o=.d)
 PROF_OBJS_DEPEND=$(PROF_OBJS:.o=.d)
 
-LIB_OPTS=-L$(ROOT_DIR)/bin $(addprefix -l, $(DEPEND_LIBS))
-DEBUG_LIB_OPTS=-L$(ROOT_DIR)/bin/debug $(addprefix -l, $(DEPEND_LIBS))
-PROF_LIB_OPTS=-L$(ROOT_DIR)/bin/prof $(addprefix -l, $(DEPEND_LIBS))
+LIB_OPTS=-L$(BINDIR) $(addprefix -l, $(DEPEND_LIBS))
+DEBUG_LIB_OPTS=-L$(BINDIR)/debug $(addprefix -l, $(DEPEND_LIBS))
+PROF_LIB_OPTS=-L$(BINDIR)/prof $(addprefix -l, $(DEPEND_LIBS))
 INCLUDE_DIR_OPTS=$(addprefix -I$(ROOT_DIR)/src/lib, $(DEPEND_LIBS))
 
 .PHONY: build
@@ -37,32 +37,32 @@ prof-build: $(PROF_TARGET)
 $(TARGET): $(OBJS)
 	@mkdir -p $(dir $@)
 	$(call log_ar,$(PROJECT_NAME),$(subst $(ROOT_DIR)/,,$@))
-	@ar rcs $@ $(OBJS)
+	@$(AR) rcs $@ $(OBJS)
 	@echo ""
 
 $(DEBUG_TARGET): $(DEBUG_OBJS)
 	@mkdir -p $(dir $@)
 	$(call log_ar,$(PROJECT_NAME),$(subst $(ROOT_DIR)/,,$@))
-	@ar rcs $@ $(DEBUG_OBJS)
+	@$(AR) rcs $@ $(DEBUG_OBJS)
 	@echo ""
 
 $(PROF_TARGET): $(PROF_OBJS)
 	@mkdir -p $(dir $@)
 	$(call log_ar,$(PROJECT_NAME),$(subst $(ROOT_DIR)/,,$@))
-	@ar rcs $@ $(PROF_OBJS)
+	@$(AR) rcs $@ $(PROF_OBJS)
 	@echo ""
 
-$(OBJS): $(ROOT_DIR)/temp/$(PROJECT_NAME)/%.o: %.cpp
+$(OBJS): $(TEMPDIR)/$(PROJECT_NAME)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(call log_cxx,$(PROJECT_NAME),$<)
 	@$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDE_DIR_OPTS) -MMD -MP
 
-$(DEBUG_OBJS): $(ROOT_DIR)/temp/debug/$(PROJECT_NAME)/%.o: %.cpp
+$(DEBUG_OBJS): $(TEMPDIR)/debug/$(PROJECT_NAME)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(call log_cxx,$(PROJECT_NAME),$<)
 	@$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDE_DIR_OPTS) -O0 -g -MMD -MP
 
-$(PROF_OBJS): $(ROOT_DIR)/temp/prof/$(PROJECT_NAME)/%.o: %.cpp
+$(PROF_OBJS): $(TEMPDIR)/prof/$(PROJECT_NAME)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(call log_cxx,$(PROJECT_NAME),$<)
 	@$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDE_DIR_OPTS) -O0 -pg -MMD -MP
@@ -78,14 +78,14 @@ clean:
 	$(call log_rm,$(PROJECT_NAME),$(subst $(ROOT_DIR)/,,$(PROF_TARGET)))
 	@rm -f $(PROF_TARGET)
 	
-	$(call log_rm,$(PROJECT_NAME),temp/$(PROJECT_NAME))
-	@rm -rf $(ROOT_DIR)/temp/$(PROJECT_NAME)
+	$(call log_rm,$(PROJECT_NAME),$(subst $(ROOT_DIR),,$(TEMPDIR))/$(PROJECT_NAME))
+	@rm -rf $(TEMPDIR)/$(PROJECT_NAME)
 	
-	$(call log_rm,$(PROJECT_NAME),temp/debug/$(PROJECT_NAME))
-	@rm -rf $(ROOT_DIR)/temp/debug/$(PROJECT_NAME)
+	$(call log_rm,$(PROJECT_NAME),$(subst $(ROOT_DIR),,$(TEMPDIR))/debug/$(PROJECT_NAME))
+	@rm -rf $(TEMPDIR)/debug/$(PROJECT_NAME)
 	
-	$(call log_rm,$(PROJECT_NAME),temp/prof/$(PROJECT_NAME))
-	@rm -rf $(ROOT_DIR)/temp/prof/$(PROJECT_NAME)
+	$(call log_rm,$(PROJECT_NAME),$(subst $(ROOT_DIR),,$(TEMPDIR))/prof/$(PROJECT_NAME))
+	@rm -rf $(TEMPDIR)/prof/$(PROJECT_NAME)
 
 -include $(OBJS_DEPEND)
 -include $(DEBUG_OBJS_DEPEND)

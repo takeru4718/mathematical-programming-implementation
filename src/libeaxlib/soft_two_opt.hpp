@@ -20,4 +20,6 @@ private:
     std::vector<std::vector<std::pair<int64_t, size_t>>> nearest_neighbors;
     const size_t near_range;
 };
+
+void print_soft_2opt_time();
 }

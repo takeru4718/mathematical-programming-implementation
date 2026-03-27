@@ -3,13 +3,16 @@
 #include <fstream>
 
 #include "genetic_algorithm.hpp"
-#include "generational_change_model.hpp"
 
 #include "object_pools.hpp"
-#include "eax_tabu.hpp"
+#include "eax_n_ab.hpp"
+#include "eax_block2.hpp"
+#include "eax_rand.hpp"
+#include "eax_uniform.hpp"
 #include "greedy_evaluator.hpp"
 #include "entropy_evaluator.hpp"
 #include "distance_preserving_evaluator.hpp"
+#include "generational_change_model.hpp"
 #include "nagata_generation_change_model.hpp"
 
 
@@ -25,41 +28,38 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     eax::ObjectPools object_pools(context.env.tsp.city_count);
     
     // 交叉関数
-    eax::EAX_tabu_Rand eax_tabu_rand(object_pools);
-    eax::EAX_tabu_N_AB eax_tabu_n_ab(object_pools);
-    eax::EAX_tabu_UNIFORM eax_tabu_uniform(object_pools);
-    auto crossover_func = [&eax_tabu_rand, &eax_tabu_n_ab, &eax_tabu_uniform](const Individual& parent1, const Individual& parent2,
+    eax::EAX_N_AB eax_n_ab(object_pools);
+    eax::EAX_Block2 eax_block2(object_pools);
+    eax::EAX_Rand eax_rand(object_pools);
+    eax::EAX_UNIFORM eax_uniform(object_pools);
+    auto crossover_func = [&eax_n_ab, &eax_block2, &eax_rand, &eax_uniform](const Individual& parent1, const Individual& parent2,
                                 Context& context) {
         auto& env = context.env;
-
-        std::vector<std::pair<size_t, size_t>> merged_tabu_edges;
-        const std::vector<std::pair<size_t, size_t>>* tabu_edges_ptr;
-
-        merged_tabu_edges.reserve(parent1.get_tabu_edges().size() + parent2.get_tabu_edges().size());
-        merged_tabu_edges.insert(merged_tabu_edges.end(), parent1.get_tabu_edges().begin(), parent1.get_tabu_edges().end());
-        merged_tabu_edges.insert(merged_tabu_edges.end(), parent2.get_tabu_edges().begin(), parent2.get_tabu_edges().end());
-        tabu_edges_ptr = &merged_tabu_edges;
         
         struct {
-            eax::EAX_tabu_Rand& eax_tabu_rand;
-            eax::EAX_tabu_N_AB& eax_tabu_n_ab;
-            eax::EAX_tabu_UNIFORM& eax_tabu_uniform;
+            eax::EAX_N_AB& eax_n_ab;
+            eax::EAX_Block2& eax_block2;
+            eax::EAX_Rand& eax_rand;
+            eax::EAX_UNIFORM& eax_uniform;
             const Individual& parent1;
             const Individual& parent2;
             Context& context;
-            const std::vector<std::pair<size_t, size_t>>* tabu_edges_ptr;
-            auto operator()(const EAX_Rand_tag&) {
-                return eax_tabu_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, {}, {}, std::forward_as_tuple(*tabu_edges_ptr));
+            auto operator()(const eax::EAX_Rand_tag&) {
+                return eax_rand(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen);
             }
-            
-            auto operator()(const EAX_n_AB_tag& n_ab) {
-                return eax_tabu_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n(), {}, std::forward_as_tuple(*tabu_edges_ptr));
+
+            auto operator()(const eax::EAX_n_AB_tag& n_ab) {
+                return eax_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n());
             }
-            
-            auto operator()(const EAX_UNIFORM_tag& uniform) {
-                return eax_tabu_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, uniform.get_ratio(), {}, std::forward_as_tuple(*tabu_edges_ptr));
+
+            auto operator()(const eax::EAX_Block2_tag&) {
+                return eax_block2(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen);
             }
-        } visitor {eax_tabu_rand, eax_tabu_n_ab, eax_tabu_uniform, parent1, parent2, context, tabu_edges_ptr};
+
+            auto operator()(const eax::EAX_UNIFORM_tag& uniform) {
+                return eax_uniform(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, uniform.get_ratio());
+            }
+        } visitor {eax_n_ab, eax_block2, eax_rand, eax_uniform, parent1, parent2, context};
         
         return std::visit(visitor, env.eax_type);
     };
@@ -85,15 +85,16 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             context.current_generation = generation;
 
             update_individual_and_edge_counts(population, context);
-            
+
             return continue_condition(population, context, generation);
         }
         
         void update_individual_and_edge_counts(vector<Individual>& population, Context& context) {
             for (auto& individual : population) {
-                auto delta = individual.update_graph_and_tabu(context.random_gen);
+                auto delta = individual.apply_pending_delta();
                 auto delta_H = eax::calc_delta_entropy(delta, context.pop_edge_counts, context.env.population_size);
                 context.entropy += delta_H;
+
                 for (const auto& mod : delta.get_modifications()) {
                     size_t v1 = mod.edge1.first;
                     size_t v2 = mod.edge1.second;
@@ -125,7 +126,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             // if (average_length - best_length < 0.001)
             //     return mpi::genetic_algorithm::TerminationReason::Converged; // 収束条件
             
-            if (generation >= 30000)
+            if (generation >= 10000)
                 return mpi::genetic_algorithm::TerminationReason::MaxGenerations; // 最大世代数条件
             
             return mpi::genetic_algorithm::TerminationReason::NotTerminated;
@@ -133,37 +134,45 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     } update_func;
     
     // ロガー
-    std::ofstream log_ofs;
+    std::ofstream log_file_stream;
     if (!log_file_name.empty()) {
-        log_ofs.open(log_file_name, std::ios::out);
-        log_ofs << "Generation,BestLength,AverageLength,WorstLength,Entropy" << std::endl;
+        log_file_stream.open(log_file_name);
+        log_file_stream << "Generation,BestLength,AverageLength,WorstLength,Entropy" << std::endl;
     }
+
     struct {
-        std::ofstream& log_os;
+        std::ofstream& log_file_stream;
+
         void operator()([[maybe_unused]]const vector<Individual>& population, Context& context, size_t generation) {
+            double time_per_generation = 0.0;
+
             if (context.start_time.time_since_epoch().count() == 0) {
                 // 計測開始時刻が未設定なら、現在時刻を設定
                 context.start_time = std::chrono::system_clock::now();
             } else {
                 auto now = std::chrono::system_clock::now();
-                context.elapsed_time += std::chrono::duration<double>(now - context.start_time).count();
+                time_per_generation = std::chrono::duration<double>(now - context.start_time).count();
+                context.elapsed_time += time_per_generation;
                 context.start_time = now;
             }
 
-            if (!log_os.is_open()) {
+
+            if (!log_file_stream.is_open()) {
                 return;
             }
+
             std::vector<double> lengths(population.size());
             for (size_t i = 0; i < population.size(); ++i) {
                 lengths[i] = population[i].get_distance();
             }
-            double best_length = *std::min_element(lengths.begin(), lengths.end());
+            auto [best_length_ptr, worst_length_ptr]  =std::minmax_element(lengths.begin(), lengths.end());
+            double best_length = *best_length_ptr;
+            double worst_length = *worst_length_ptr;
             double average_length = std::accumulate(lengths.begin(), lengths.end(), 0.0) / lengths.size();
-            double worst_length = *std::max_element(lengths.begin(), lengths.end());
             
-            log_os << generation << "," << best_length << "," << average_length << "," << worst_length << "," << context.entropy << std::endl;
+            log_file_stream << generation << "," << best_length << "," << average_length << "," << worst_length << "," << context.entropy << "," << time_per_generation << std::endl;
         }
-    } logging{log_ofs};
+    } logging {log_file_stream};
     
     struct {
         void operator()([[maybe_unused]]const vector<Individual>& population, Context& context, size_t generation, [[maybe_unused]]mpi::genetic_algorithm::TerminationReason reason) {

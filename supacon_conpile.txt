@@ -1,0 +1,8 @@
+・理研用
+CXXFLAGS="-static -static-libstdc++" make build-eax
+
+・miyabi用
+CXXFLAGS="-static -static-libstdc++" make build-eax ARCH=aarch64
+
+・pegasus用
+CXXFLAGS="-static -static-libstdc++" make build-eax ARCH=x86_64

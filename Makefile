@@ -20,7 +20,32 @@ MAKEFILE_TEMPLATE_FOR_APP=makefiles/Makefile_app.mk
 MAKEFILE_TEMPLATE_FOR_LIB=makefiles/Makefile_lib.mk
 
 export ROOT_DIR=$(shell pwd)
-export CXXFLAGS:=-std=c++23 -O3 -Wall -Wextra -pedantic -mtune=native -march=native -flto=auto $(CXXFLAGS)
+
+# アーキテクチャ切り替え:
+#   ARCH=aarch64  : aarch64向けクロスコンパイル
+#   ARCH=x86_64   : x86_64汎用ビルド (-march=native なし、他マシンに持ち運び可)
+#   ARCH=native   : ビルドマシン最適化 (デフォルト)
+ARCH ?= native
+
+ifeq ($(ARCH),aarch64)
+  export CXX    := aarch64-linux-gnu-g++
+  export AR     := aarch64-linux-gnu-ar
+  export BINDIR  := $(ROOT_DIR)/bin/aarch64
+  export TEMPDIR := $(ROOT_DIR)/temp/aarch64
+  export CXXFLAGS := -std=c++23 -O3 -Wall -Wextra -pedantic -flto=auto $(CXXFLAGS)
+else ifeq ($(ARCH),x86_64)
+  export CXX    := g++
+  export AR     := ar
+  export BINDIR  := $(ROOT_DIR)/bin/x86_64
+  export TEMPDIR := $(ROOT_DIR)/temp/x86_64
+  export CXXFLAGS := -std=c++23 -O3 -Wall -Wextra -pedantic -march=x86-64 -mtune=generic -flto=auto $(CXXFLAGS)
+else
+  export CXX    := g++
+  export AR     := ar
+  export BINDIR  := $(ROOT_DIR)/bin
+  export TEMPDIR := $(ROOT_DIR)/temp
+  export CXXFLAGS := -std=c++23 -O3 -Wall -Wextra -pedantic -mtune=native -march=native -flto=auto $(CXXFLAGS)
+endif
 
 .PHONY: all
 all: $(addprefix build-, $(PROJECTS))

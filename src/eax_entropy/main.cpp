@@ -55,6 +55,8 @@ struct Arguments {
     std::string log_file_name = "";
     // キャッシュディレクトリ
     std::string cache_directory = ".";
+    // 2-optの種類
+    std::string two_opt_type_str = "soft"; // "normal", "soft"
 };
 
 void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_algorithm::TerminationReason reason)
@@ -132,7 +134,7 @@ void execute_normal(const Arguments& args)
     mt19937 rng(args.seed);
     
     // neighbor_range
-    size_t near_range = 20; // 近傍範囲
+    size_t near_range = 20; // 近傍範囲, normal: 50, soft: 20
     // 2opt
     eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
@@ -152,16 +154,20 @@ void execute_normal(const Arguments& args)
             cache_file = args.cache_directory + "/" + cache_file;
         }
 
-        vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
-            // 2-optを適用
-            two_opt.apply(path, local_seed);
-        });
-
-        //木じゃないsoft2optを適用する場合は以下のコメントを外す
-        // vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
-        //     // 2-optを適用
-        //     soft_two_opt.apply(path);
-        // });
+        vector<vector<size_t>> initial_paths;
+        if (args.two_opt_type_str == "normal") {
+            initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
+                // 2-optを適用
+                two_opt.apply(path, local_seed);
+            });
+        } else if (args.two_opt_type_str == "soft") {
+            initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
+                // 2-optを適用
+                soft_two_opt.apply(path);
+            });
+        } else {
+            throw std::runtime_error("Unknown two-opt type '" + args.two_opt_type_str + "'. Options are 'normal' or 'soft'.");
+        }
 
         vector<eax::Individual> population;
         population.reserve(initial_paths.size());
@@ -178,13 +184,7 @@ void execute_normal(const Arguments& args)
         // 環境
         eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type};
         eax::Context ga_context = eax::create_context(population, ga_env);
-
-        //2optの計測時間を出力
-        //eax::print_soft_2opt_time();
-        //eax::print_2opt_time();
-        //2opt後の集団エントロピーを出力
-        //cout << "Initial population entropy (after 2-opt): " << ga_context.entropy << endl;
-
+        
         cout << "Starting genetic algorithm..." << endl;
         // 計測開始
         auto result = eax::execute_ga(population, ga_context, args.log_file_name);
@@ -259,7 +259,7 @@ int main(int argc, char* argv[])
     
     mpi::ArgumentSpec cache_dir_spec(args.cache_directory);
     cache_dir_spec.add_argument_name("--cache-dir");
-    cache_dir_spec.set_description("-;-cache-dir <directory> \t:Directory to store cache files of initial populations (default: current directory).");
+    cache_dir_spec.set_description("--cache-dir <directory> \t:Directory to store cache files of initial populations (default: current directory).");
     parser.add_argument(cache_dir_spec);
     
     bool help_requested = false;

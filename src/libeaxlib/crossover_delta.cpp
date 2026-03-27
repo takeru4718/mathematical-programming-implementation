@@ -31,4 +31,5 @@ uint64_t CrossoverDelta::compute_delta_checksum(const std::vector<Modification> 
     
     return h_first ^ std::rotl(h_mid, 19) ^ std::rotl(h_last, 41);
 }
+
 }

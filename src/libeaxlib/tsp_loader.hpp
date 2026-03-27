@@ -18,6 +18,11 @@ namespace tsp {
             if (tij < rij) return tij + 1;
             else return tij;
         }
+
+        inline int64_t CEIL_2D(double x1, double y1, double x2, double y2) {
+            return size_t(std::ceil(std::sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))));
+        }
+
     }
 
     struct TSP {
