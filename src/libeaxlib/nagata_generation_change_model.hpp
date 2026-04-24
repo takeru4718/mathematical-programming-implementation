@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <type_traits>
 #include <random>
+#include <fstream>
+#include <filesystem>
+#include "analysis/optimal_edges_loader.hpp"
+#include "analysis/analysis_logger.hpp"
+
 namespace eax {
 
 /**
@@ -35,6 +40,8 @@ public:
         } && std::uniform_random_bit_generator<decltype(Context::random_gen)>)
     void operator()(std::vector<Individual>& population, Context& context)
     {
+        //分析用のロガー
+        analysis::AnalysisLogger local_logger(context.env.analysis_config);
         using Child = std::invoke_result_t<CrossOverFunc, Individual&, Individual&, Context&>::value_type;
         auto calc_all_fitness = [](const std::vector<Child>& children, Context& context, FitnessFunc& fitness_func) {
             std::vector<double> fitness_values(children.size());
@@ -78,7 +85,39 @@ public:
                     best_index = j;
                 }
             }
-            
+
+            if (best_index != children.size() - 1 && local_logger.enabled_abcycle_optimal_edges()){
+                //ここでabcycleのサイズを取得する
+                const size_t ab_n = children[best_index].get_num_ab_cycle_modifications();
+                //最適辺減少数を取得
+                const auto& mods = children[best_index].get_modifications();
+                const size_t prefix_n = std::min(ab_n, mods.size());//念のため
+                //const size_t prefix_n = mods.size();
+                //ここで最適辺読み込み(別ファイルから読み込むものとする)
+                const auto& optimal_edges = analysis::load_optimal_edges(local_logger.optimal_edges_path());
+                //最適辺が減少した数を保存
+                size_t num_optimal_edges_decreased = 0;
+                //最適辺が増加した数を保存
+                size_t num_optimal_edges_increased = 0;
+                //Modificationを逆に辿って消える辺を取得する
+                for (size_t i = 0; i < prefix_n; ++i) {
+                    const auto& m = mods[i];
+                    auto [v1, v2] = m.edge1;
+                    auto new_v2 = m.new_v2;
+                    //modificationは順方向と逆方向の両方の情報を持っているため，v1 < v2のみを考える
+                    if (v1 < v2 && std::find(optimal_edges.begin(), optimal_edges.end(), std::make_pair(v1, v2)) != optimal_edges.end()) {
+                        num_optimal_edges_decreased++;
+                    }
+                    if (v1 < new_v2 && std::find(optimal_edges.begin(), optimal_edges.end(), std::make_pair(v1, new_v2)) != optimal_edges.end()) {
+                        num_optimal_edges_increased++;
+                    }
+                }
+
+                //ここでabcycleのサイズに対する最適辺の減少数をファイル書き出し
+                local_logger.append_abcycle_optimal_edges(ab_n, num_optimal_edges_decreased, num_optimal_edges_increased);
+            }
+
+
             parent_A = std::move(children[best_index]);
         }
 

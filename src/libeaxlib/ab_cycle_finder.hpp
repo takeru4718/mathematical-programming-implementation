@@ -77,7 +77,9 @@ std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
             mpi::ObjectPool<std::vector<size_t>>& any_size_vector_pool,
             mpi::ObjectPool<std::vector<size_t>>& vector_of_tsp_size_pool,
             mpi::ObjectPool<std::vector<std::array<size_t, 2>>>& doubly_linked_list_pool,
-            mpi::ObjectPool<mpi::LimitedRangeIntegerSet>& LRIS_pool)
+            mpi::ObjectPool<mpi::LimitedRangeIntegerSet>& LRIS_pool,
+            bool enable_abcycle_size_control = false,
+            size_t abcycle_size_max = std::numeric_limits<size_t>::max())
 {
     using namespace std;
     const size_t city_count = parent1.size();
@@ -311,10 +313,24 @@ public:
     std::vector<PooledVectorPtr> operator()(size_t needs,
             const Individual& parent1,
             const Individual& parent2,
-            std::mt19937& rng)
+            std::mt19937& rng,
+            bool enable_abcycle_size_control = false,
+            size_t abcycle_size_max = std::numeric_limits<size_t>::max())
     {
-        return find_AB_cycles(needs, parent1, parent2, rng, any_size_vector_pool, vector_of_tsp_size_pool, doubly_linked_list_pool, LRIS_pool);
+        return find_AB_cycles(needs, parent1, parent2, rng, any_size_vector_pool, vector_of_tsp_size_pool, doubly_linked_list_pool, LRIS_pool, enable_abcycle_size_control, abcycle_size_max);
     }
+
+    //operator()のオーバーロード
+    // template <individual_readable Individual>
+    // std::vector<PooledVectorPtr> operator()(size_t needs,
+    //         const Individual& parent1,
+    //         const Individual& parent2,
+    //         std::mt19937& rng,
+    //         bool enable_abcycle_size_control,
+    //         size_t abcycle_size_max)
+    // {
+    //     return find_AB_cycles(needs, parent1, parent2, rng, any_size_vector_pool, vector_of_tsp_size_pool, doubly_linked_list_pool, LRIS_pool, enable_abcycle_size_control, abcycle_size_max);
+    // }
 
     using completeness_category = complete_ABCycleFinder_tag;
 private:

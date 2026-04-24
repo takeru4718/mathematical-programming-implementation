@@ -15,6 +15,7 @@
 #include "eax_uniform.hpp"
 
 #include "individual_with_pending_delta.hpp"
+#include "analysis/analysis_config.hpp"
 
 namespace eax {
     using Individual = eax::IndividualWithPendingDelta;
@@ -34,6 +35,7 @@ namespace eax {
         SelectionType selection_type;
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
+        analysis::AnalysisConfig analysis_config;
     };
 
     struct Context {

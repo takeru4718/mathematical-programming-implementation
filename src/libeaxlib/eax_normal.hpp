@@ -86,6 +86,7 @@ public:
             auto e_set_indices_ptr = e_set_assembler.next(rng);
             auto& e_set_indices = *e_set_indices_ptr;
  
+            //元のselected_AB_cycles_view
             auto selected_AB_cycles_view = std::views::transform(e_set_indices, [&AB_cycles](size_t index) -> const ab_cycle_t& {
                 return *AB_cycles[index];
             }); 

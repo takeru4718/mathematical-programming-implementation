@@ -50,7 +50,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             }
 
             auto operator()(const eax::EAX_n_AB_tag& n_ab) {
-                return eax_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n());
+                return eax_n_ab(parent1, parent2, context.env.num_children, context.env.tsp, context.random_gen, n_ab.get_n(), std::tuple<>{}, std::forward_as_tuple(context.env.analysis_config.enable_abcycle_size_control, context.env.analysis_config.abcycle_size_max));
             }
 
             auto operator()(const eax::EAX_Block2_tag&) {
@@ -118,10 +118,10 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
                 context.stagnation_generations += 1;
             }
             
-            if (average_length - best_length < 0.001)
-                return mpi::genetic_algorithm::TerminationReason::Converged; // 収束条件
+            // if (average_length - best_length < 0.001)
+            //     return mpi::genetic_algorithm::TerminationReason::Converged; // 収束条件
             
-            if (generation >= 10000)
+            if (generation >= 45)
                 return mpi::genetic_algorithm::TerminationReason::MaxGenerations; // 最大世代数条件
             
             return mpi::genetic_algorithm::TerminationReason::NotTerminated;
