@@ -68,6 +68,8 @@ inline PooledVectorPtr create_AB_cycle(std::vector<size_t>& finding_path,
  * @param vector_of_tsp_size_pool TSPの都市数と同じサイズのベクタープール
  * @param doubly_linked_list_pool TSPの都市数と同じサイズの双方向リストプール
  * @param LRIS_pool 0 ~ (TSPの都市数 - 1)の整数を管理する集合のプール
+ * @param enable_abcycle_size_control ABサイクルのサイズ制御を有効にするかどうか
+ * @param abcycle_size_max ABサイクルのサイズの最大値
  * @return ABサイクルのポインタのベクター
  */
 std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
@@ -205,7 +207,7 @@ std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
                 if (current_city == visited.front()) { // スタートにたどり着いたなら
                     // ABサイクル構成処理
                     auto cycle = create_AB_cycle(visited, 0, cities_having_2_edges, cities_having_just_1_edge, any_size_vector_pool);
-                    if (cycle->size() > 2) {
+                    if (cycle->size() > 2 && (!enable_abcycle_size_control || cycle->size() <= abcycle_size_max)) {
                         AB_cycles.emplace_back(std::move(cycle));
                     }
                     break;
@@ -220,7 +222,7 @@ std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
                     if ((visited.size() + 1) % 2 == 0) { // 親Bのエッジでスタートして、親Aのエッジで戻ってきた
                         // ABサイクル構成処理
                         auto cycle = create_AB_cycle(visited, 0, cities_having_2_edges, cities_having_just_1_edge, any_size_vector_pool);
-                        if (cycle->size() > 2) {
+                        if (cycle->size() > 2 && (!enable_abcycle_size_control || cycle->size() <= abcycle_size_max)) {
                             AB_cycles.emplace_back(std::move(cycle));
                         }
                         break;
@@ -230,7 +232,7 @@ std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
                 } else if (first_visited[current_city] != 0 && (visited.size() - first_visited[current_city] + 1) % 2 == 0) {
                     // 交差している　かつ　ABサイクルを構成するなら
                     auto cycle = create_AB_cycle(visited, first_visited[current_city], cities_having_2_edges, cities_having_just_1_edge, any_size_vector_pool);
-                    if (cycle->size() > 2) {
+                    if (cycle->size() > 2 && (!enable_abcycle_size_control || cycle->size() <= abcycle_size_max)) {
                         AB_cycles.emplace_back(std::move(cycle));
                     }
                     break;
@@ -267,7 +269,7 @@ std::vector<PooledVectorPtr> find_AB_cycles(size_t needs,
         }
         
         auto cycle = create_AB_cycle(visited, 0, cities_having_2_edges, cities_having_just_1_edge, any_size_vector_pool);
-        if (cycle->size() > 2) {
+        if (cycle->size() > 2 && (!enable_abcycle_size_control || cycle->size() <= abcycle_size_max)) {
             AB_cycles.emplace_back(std::move(cycle));
         }
         
@@ -319,18 +321,6 @@ public:
     {
         return find_AB_cycles(needs, parent1, parent2, rng, any_size_vector_pool, vector_of_tsp_size_pool, doubly_linked_list_pool, LRIS_pool, enable_abcycle_size_control, abcycle_size_max);
     }
-
-    //operator()のオーバーロード
-    // template <individual_readable Individual>
-    // std::vector<PooledVectorPtr> operator()(size_t needs,
-    //         const Individual& parent1,
-    //         const Individual& parent2,
-    //         std::mt19937& rng,
-    //         bool enable_abcycle_size_control,
-    //         size_t abcycle_size_max)
-    // {
-    //     return find_AB_cycles(needs, parent1, parent2, rng, any_size_vector_pool, vector_of_tsp_size_pool, doubly_linked_list_pool, LRIS_pool, enable_abcycle_size_control, abcycle_size_max);
-    // }
 
     using completeness_category = complete_ABCycleFinder_tag;
 private:
