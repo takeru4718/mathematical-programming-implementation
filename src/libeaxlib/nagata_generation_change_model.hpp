@@ -93,8 +93,8 @@ public:
                 const auto& mods = children[best_index].get_modifications();
                 const size_t prefix_n = std::min(ab_n, mods.size());//念のため
                 //const size_t prefix_n = mods.size();
-                //ここで最適辺読み込み(別ファイルから読み込むものとする)
-                const auto& optimal_edges = analysis::load_optimal_edges(local_logger.optimal_edges_path());
+                //ここで最適辺読み込み(指定したディレクトリから読み込むものとする)
+                const auto& optimal_edges = analysis::load_optimal_edges_from_directory(local_logger.optimal_edges_directory());
                 //最適辺が減少した数を保存
                 size_t num_optimal_edges_decreased = 0;
                 //最適辺が増加した数を保存
@@ -105,16 +105,23 @@ public:
                     auto [v1, v2] = m.edge1;
                     auto new_v2 = m.new_v2;
                     //modificationは順方向と逆方向の両方の情報を持っているため，v1 < v2のみを考える
-                    if (v1 < v2 && std::find(optimal_edges.begin(), optimal_edges.end(), std::make_pair(v1, v2)) != optimal_edges.end()) {
+                    if (v1 < v2 && optimal_edges.contains({v1, v2})) {
                         num_optimal_edges_decreased++;
                     }
-                    if (v1 < new_v2 && std::find(optimal_edges.begin(), optimal_edges.end(), std::make_pair(v1, new_v2)) != optimal_edges.end()) {
+                    if (v1 < new_v2 && optimal_edges.contains({v1, new_v2})) {
                         num_optimal_edges_increased++;
                     }
                 }
 
                 //ここでabcycleのサイズに対する最適辺の減少数をファイル書き出し
-                local_logger.append_abcycle_optimal_edges(ab_n, num_optimal_edges_decreased, num_optimal_edges_increased);
+                local_logger.append_abcycle_optimal_edges(context.current_generation, ab_n, num_optimal_edges_decreased, num_optimal_edges_increased);
+            }
+
+            if(best_index != children.size() - 1 && local_logger.enabled_abcycle_distribution()){
+                //ここでabcycleのサイズを取得する
+                const size_t ab_n = children[best_index].get_num_ab_cycle_modifications();
+                //abcycleのサイズをファイル書き出し
+                local_logger.append_abcycle_distribution(context.current_generation, ab_n);
             }
 
 

@@ -23,7 +23,8 @@
 #include "population_initializer.hpp"
 #include "context.hpp"
 #include "ga.hpp"
-#include "two_opt.hpp"
+//#include "two_opt.hpp"
+#include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
 #include <time.h>
 #include "eax_tabu.hpp"
@@ -135,7 +136,8 @@ void execute_normal(const Arguments& args)
     // neighbor_range
     size_t near_range = 50; // 近傍範囲
     // 2opt
-    eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
+    //eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
+    eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     // 初期集団生成器
     tsp::PopulationInitializer population_initializer(args.population_size, tsp.city_count);
     
@@ -152,9 +154,14 @@ void execute_normal(const Arguments& args)
             cache_file = args.cache_directory + "/" + cache_file;
         }
         
-        vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
+        // vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
+        //     // 2-optを適用
+        //     two_opt.apply(path, local_seed);
+        // });
+
+        vector<vector<size_t>> initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
             // 2-optを適用
-            two_opt.apply(path, local_seed);
+            soft_two_opt.apply(path);
         });
         vector<eax::Individual> population;
         population.reserve(initial_paths.size());

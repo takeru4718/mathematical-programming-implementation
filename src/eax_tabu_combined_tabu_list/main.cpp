@@ -23,12 +23,13 @@
 #include "population_initializer.hpp"
 #include "context.hpp"
 #include "ga.hpp"
-#include "two_opt.hpp"
+//#include "two_opt.hpp"
 #include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
 #include <time.h>
 #include "eax_tabu.hpp"
 #include "eax_tag.hpp"
+#include "eaxutils.hpp"
 
 struct Arguments {
     // TSPファイルの名前
@@ -49,6 +50,10 @@ struct Arguments {
     std::string output_file_name = "result.md";
     // ログファイル名
     std::string log_file_name = "";
+    // ツアーファイル名
+    std::string tour_file_name = "";
+    // 複数の最良解を保存するかどうか.ツアーファイル名を指定する必要がある．
+    bool save_multiple_best_solutions = true;
     // キャッシュディレクトリ
     std::string cache_directory = ".";
     // タブーリストの存続世代数
@@ -138,7 +143,7 @@ void execute_normal(const Arguments& args)
     // neighbor_range
     size_t near_range = 20; // 近傍範囲, normal: 50, soft: 20
     // 2opt
-    eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
+    //eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     // 初期集団生成器
     tsp::PopulationInitializer population_initializer(args.population_size, tsp.city_count);
@@ -158,10 +163,12 @@ void execute_normal(const Arguments& args)
         
         vector<vector<size_t>> initial_paths;
         if (args.two_opt_type_str == "normal") {
-            initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
-                // 2-optを適用
-                two_opt.apply(path, local_seed);
-            });
+            // initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
+            //     // 2-optを適用
+            //     two_opt.apply(path, local_seed);
+            // });
+            //メンテナンス中(メモリ節約)であるため，エラーを投げる
+            throw std::runtime_error("Two-opt is not supported for tabu combined tabu list.");
         } else if (args.two_opt_type_str == "soft") {
             initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
                 // 2-optを適用
@@ -187,6 +194,21 @@ void execute_normal(const Arguments& args)
         // 計測開始
         auto result = eax::execute_ga(population, ga_context, args.log_file_name);
         auto& [termination_reason, result_population] = result;
+
+        //ツアーファイルを保存
+        if (!args.tour_file_name.empty()){
+            ofstream tour_file(args.tour_file_name);
+            if (!tour_file.is_open()) {
+                throw std::runtime_error("Failed to open tour file: " + args.tour_file_name);
+            }
+            if (args.save_multiple_best_solutions) {
+                print_best_solution_unique(result_population, tour_file);
+            } else {
+                print_best_solution(result_population, tour_file);
+            }
+            tour_file.close();
+            cout << "Tour saved to " << args.tour_file_name << endl;
+        }
         
         // 結果を出力
         ofstream result_file(args.output_file_name, ios::app);
@@ -269,6 +291,16 @@ int main(int argc, char* argv[])
     two_opt_type_spec.add_argument_name("--two-opt-type");
     two_opt_type_spec.set_description("--two-opt-type <type> \t:Type of 2-opt. Options: 'normal' (default) or 'soft'.");
     parser.add_argument(two_opt_type_spec);
+
+    mpi::ArgumentSpec tour_file_name_spec(args.tour_file_name);
+    tour_file_name_spec.add_argument_name("--tour");
+    tour_file_name_spec.set_description("--tour <filename> \t:Output tour file name.");
+    parser.add_argument(tour_file_name_spec);
+
+    mpi::ArgumentSpec save_multiple_best_solutions_spec(args.save_multiple_best_solutions);
+    save_multiple_best_solutions_spec.add_set_argument_name("--save-multiple-best-solutions");
+    save_multiple_best_solutions_spec.set_description("--save-multiple-best-solutions \t:Save multiple best solutions (default: false).");
+    parser.add_argument(save_multiple_best_solutions_spec);
     
     bool help_requested = false;
     mpi::ArgumentSpec help_spec(help_requested);

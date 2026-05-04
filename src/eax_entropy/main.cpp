@@ -28,7 +28,7 @@
 #include "population_initializer.hpp"
 #include "context.hpp"
 #include "ga.hpp"
-#include "two_opt.hpp"
+//#include "two_opt.hpp"
 #include "soft_two_opt.hpp"
 #include "command_line_argument_parser.hpp"
 #include "eax_tag.hpp"
@@ -136,7 +136,7 @@ void execute_normal(const Arguments& args)
     // neighbor_range
     size_t near_range = 20; // 近傍範囲, normal: 50, soft: 20
     // 2opt
-    eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
+    //eax::TwoOpt two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     eax::SoftTwoOpt soft_two_opt(tsp.adjacency_matrix, tsp.NN_list, near_range);
     // 初期集団生成器
     tsp::PopulationInitializer population_initializer(args.population_size, tsp.city_count);
@@ -156,10 +156,12 @@ void execute_normal(const Arguments& args)
 
         vector<vector<size_t>> initial_paths;
         if (args.two_opt_type_str == "normal") {
-            initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
-                // 2-optを適用
-                two_opt.apply(path, local_seed);
-            });
+            // initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&two_opt, local_seed](vector<size_t>& path) {
+            //     // 2-optを適用
+            //     two_opt.apply(path, local_seed);
+            // });
+            //メンテナンス中(メモリ節約)であるため，エラーを投げる
+            throw std::runtime_error("Two-opt is not supported for entropy selection.");
         } else if (args.two_opt_type_str == "soft") {
             initial_paths = population_initializer.initialize_population(local_seed, cache_file, [&soft_two_opt](vector<size_t>& path) {
                 // 2-optを適用

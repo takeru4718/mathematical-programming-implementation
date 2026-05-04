@@ -6,3 +6,6 @@ CXXFLAGS="-static -static-libstdc++" make build-eax ARCH=aarch64
 
 ・pegasus用
 CXXFLAGS="-static -static-libstdc++" make build-eax ARCH=x86_64
+
+・静的コンパイルと動的コンパイルの確認方法
+file bin/eax

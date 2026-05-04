@@ -8,4 +8,7 @@ study/
 exercises/
 result/
 optimal_edges/
-analysis/
+/analysis/
+/src/libeaxlib/analysis/
+!./src/libeaxlib/analysis/**
+.venv/
