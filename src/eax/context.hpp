@@ -43,6 +43,7 @@ namespace eax {
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
         GenerationModel generation_model = GenerationModel::Nagata;
+        size_t max_generations = 10000;
     };
 
     struct Context {

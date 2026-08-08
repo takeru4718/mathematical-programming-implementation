@@ -49,6 +49,8 @@ struct Arguments {
     std::string selection_type_str = "ent"; // "greedy", "ent", or "distance"
     // 世代交代モデル（家族からの生存個体の選び方）
     std::string generation_model_str = "nagata"; // "nagata" or "pseudo-mgg"
+    // 最大世代数
+    size_t max_generations = 10000;
     // 交叉手法
     std::string eax_type_str = "EAX_1_AB";
     // 出力ファイル名
@@ -199,7 +201,7 @@ void execute_normal(const Arguments& args)
         eax_type = eax::create_eax_tag_from_string<eax::eax_type_t>(args.eax_type_str);
 
         // 環境
-        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, generation_model};
+        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, generation_model, args.max_generations};
         eax::Context ga_context{ga_env, population};
         
         cout << "Starting genetic algorithm..." << endl;
@@ -265,6 +267,12 @@ int main(int argc, char* argv[])
                                           "'nagata' (default) always selects the elite from the family (children + parent A); "
                                           "'pseudo-mgg' selects elite on even loop indices and roulette on odd loop indices.");
     parser.add_argument(generation_model_spec);
+
+    mpi::ArgumentSpec max_generations_spec(args.max_generations);
+    max_generations_spec.add_argument_name("--max-generations");
+    max_generations_spec.add_argument_name("--mg");
+    max_generations_spec.set_description("--max-generations <number> \t:Maximum number of generations (default: 10000).");
+    parser.add_argument(max_generations_spec);
     
     mpi::ArgumentSpec eax_type_spec(args.eax_type_str);
     eax_type_spec.add_argument_name("--eax-type");
