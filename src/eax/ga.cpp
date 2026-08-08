@@ -182,7 +182,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     };
 
     std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> result;
-    if (context.env.parent_selection_mode == ParentSelectionMode::PseudoMgg) {
+    if (context.env.generation_model == GenerationModel::PseudoMgg) {
         eax::PseudoMggGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
         result = run_with_step(generational_step);
     } else {

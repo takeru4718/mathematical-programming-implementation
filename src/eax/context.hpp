@@ -27,10 +27,10 @@ namespace eax {
         DistancePreserving,
     };
 
-    // 親選択（交配相手の選び方）
-    // Nagata: 従来EAX（shuffle + 環状ペアリング）
-    // PseudoMgg: 偶数番エリート / 奇数番ルーレットの擬似MGG
-    enum class ParentSelectionMode {
+    // 世代交代モデル
+    // Nagata: 従来EAX（家族から常にエリート生存）
+    // PseudoMgg: 家族（子+親A）から、ループ偶数番はエリート / 奇数番はルーレットで生存選択
+    enum class GenerationModel {
         Nagata,
         PseudoMgg,
     };
@@ -42,7 +42,7 @@ namespace eax {
         SelectionType selection_type;
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
-        ParentSelectionMode parent_selection_mode = ParentSelectionMode::Nagata;
+        GenerationModel generation_model = GenerationModel::Nagata;
     };
 
     struct Context {

@@ -45,10 +45,10 @@ struct Arguments {
     size_t population_size = 0;
     // １度の交叉で生成する子の数
     size_t num_children = 30;
-    // 評価関数の種類（生存選択）
+    // 評価関数の種類（生存選択の適応度）
     std::string selection_type_str = "ent"; // "greedy", "ent", or "distance"
-    // 親選択モード
-    std::string parent_selection_str = "nagata"; // "nagata" or "pseudo-mgg"
+    // 世代交代モデル（家族からの生存個体の選び方）
+    std::string generation_model_str = "nagata"; // "nagata" or "pseudo-mgg"
     // 交叉手法
     std::string eax_type_str = "EAX_1_AB";
     // 出力ファイル名
@@ -63,7 +63,7 @@ void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_al
 {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
-        os << "| TSP Name | Population Size | Selection Type | Parent Selection | Children per Crossover | Seed | Best Length | Generation Reached Best | Total Generations | Time (s) | Termination Reason |" << std::endl;
+        os << "| TSP Name | Population Size | Selection Type | Generation Model | Children per Crossover | Seed | Best Length | Generation Reached Best | Total Generations | Time (s) | Termination Reason |" << std::endl;
         os << "|----------|-----------------|----------------|------------------|------------------------|------|-------------|-------------------------|-------------------|----------|--------------------|" << std::endl;
     }
     
@@ -83,11 +83,11 @@ void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_al
             break;
     }
     os << " | ";
-    switch (context.env.parent_selection_mode) {
-        case eax::ParentSelectionMode::Nagata:
+    switch (context.env.generation_model) {
+        case eax::GenerationModel::Nagata:
             os << "nagata";
             break;
-        case eax::ParentSelectionMode::PseudoMgg:
+        case eax::GenerationModel::PseudoMgg:
             os << "pseudo-mgg";
             break;
         default:
@@ -137,13 +137,13 @@ void execute_normal(const Arguments& args)
         throw std::runtime_error("Unknown selection type '" + args.selection_type_str + "'. Options are 'greedy', 'ent', or 'distance'.");
     }
 
-    eax::ParentSelectionMode parent_selection_mode = eax::ParentSelectionMode::Nagata;
-    if (args.parent_selection_str == "nagata") {
-        parent_selection_mode = eax::ParentSelectionMode::Nagata;
-    } else if (args.parent_selection_str == "pseudo-mgg" || args.parent_selection_str == "pseudo_mgg") {
-        parent_selection_mode = eax::ParentSelectionMode::PseudoMgg;
+    eax::GenerationModel generation_model = eax::GenerationModel::Nagata;
+    if (args.generation_model_str == "nagata") {
+        generation_model = eax::GenerationModel::Nagata;
+    } else if (args.generation_model_str == "pseudo-mgg" || args.generation_model_str == "pseudo_mgg") {
+        generation_model = eax::GenerationModel::PseudoMgg;
     } else {
-        throw std::runtime_error("Unknown parent selection '" + args.parent_selection_str + "'. Options are 'nagata' or 'pseudo-mgg'.");
+        throw std::runtime_error("Unknown generation model '" + args.generation_model_str + "'. Options are 'nagata' or 'pseudo-mgg'.");
     }
 
     tsp::TSP tsp = tsp::TSP_Loader::load_tsp(args.file_name);
@@ -199,7 +199,7 @@ void execute_normal(const Arguments& args)
         eax_type = eax::create_eax_tag_from_string<eax::eax_type_t>(args.eax_type_str);
 
         // 環境
-        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, parent_selection_mode};
+        eax::Environment ga_env{tsp, args.population_size, args.num_children, selection_type, local_seed, eax_type, generation_model};
         eax::Context ga_context{ga_env, population};
         
         cout << "Starting genetic algorithm..." << endl;
@@ -259,12 +259,12 @@ int main(int argc, char* argv[])
                                    "Options are 'greedy' for Greedy Selection, 'ent' for Entropy Selection (default), and 'distance' for Distance-preserving Selection.");
     parser.add_argument(selection_spec);
 
-    mpi::ArgumentSpec parent_selection_spec(args.parent_selection_str);
-    parent_selection_spec.add_argument_name("--parent-selection");
-    parent_selection_spec.set_description("--parent-selection <type> \t:Parent pairing mode. "
-                                          "'nagata' (default) uses shuffled circular pairing; "
-                                          "'pseudo-mgg' uses elite for even indices and roulette for odd indices.");
-    parser.add_argument(parent_selection_spec);
+    mpi::ArgumentSpec generation_model_spec(args.generation_model_str);
+    generation_model_spec.add_argument_name("--generation-model");
+    generation_model_spec.set_description("--generation-model <type> \t:Generation change model. "
+                                          "'nagata' (default) always selects the elite from the family (children + parent A); "
+                                          "'pseudo-mgg' selects elite on even loop indices and roulette on odd loop indices.");
+    parser.add_argument(generation_model_spec);
     
     mpi::ArgumentSpec eax_type_spec(args.eax_type_str);
     eax_type_spec.add_argument_name("--eax-type");
