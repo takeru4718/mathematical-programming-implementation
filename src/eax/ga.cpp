@@ -14,6 +14,7 @@
 #include "distance_preserving_evaluator.hpp"
 #include "generational_change_model.hpp"
 #include "nagata_generation_change_model.hpp"
+#include "pseudo_mgg_generation_change_model.hpp"
 #include "eaxutils.hpp"
 
 
@@ -175,13 +176,19 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
         }
     } post_process;
 
-    // 世代交代処理
-    eax::NagataGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
-    
-    // GA実行オブジェクト
-    mpi::GenerationalChangeModel genetic_algorithm(generational_step, update_func, logging, post_process);
+    auto run_with_step = [&](auto&& generational_step) {
+        mpi::GenerationalChangeModel genetic_algorithm(generational_step, update_func, logging, post_process);
+        return genetic_algorithm.execute(population, context, context.current_generation);
+    };
 
-    auto result = genetic_algorithm.execute(population, context, context.current_generation);
+    std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> result;
+    if (context.env.parent_selection_mode == ParentSelectionMode::PseudoMgg) {
+        eax::PseudoMggGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
+        result = run_with_step(generational_step);
+    } else {
+        eax::NagataGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
+        result = run_with_step(generational_step);
+    }
     
     if (log_file_stream.is_open()) {
         auto& [reason, final_population] = result;

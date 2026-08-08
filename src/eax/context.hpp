@@ -26,6 +26,14 @@ namespace eax {
         Ent,
         DistancePreserving,
     };
+
+    // 親選択（交配相手の選び方）
+    // Nagata: 従来EAX（shuffle + 環状ペアリング）
+    // PseudoMgg: 偶数番エリート / 奇数番ルーレットの擬似MGG
+    enum class ParentSelectionMode {
+        Nagata,
+        PseudoMgg,
+    };
     
     struct Environment {
         tsp::TSP tsp;
@@ -34,6 +42,7 @@ namespace eax {
         SelectionType selection_type;
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
+        ParentSelectionMode parent_selection_mode = ParentSelectionMode::Nagata;
     };
 
     struct Context {
