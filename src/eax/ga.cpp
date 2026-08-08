@@ -14,6 +14,7 @@
 #include "distance_preserving_evaluator.hpp"
 #include "generational_change_model.hpp"
 #include "nagata_generation_change_model.hpp"
+#include "pseudo_mgg_generation_change_model.hpp"
 #include "eaxutils.hpp"
 
 
@@ -121,7 +122,7 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
             if (average_length - best_length < 0.001)
                 return mpi::genetic_algorithm::TerminationReason::Converged; // 収束条件
             
-            if (generation >= 10000)
+            if (generation >= context.env.max_generations)
                 return mpi::genetic_algorithm::TerminationReason::MaxGenerations; // 最大世代数条件
             
             return mpi::genetic_algorithm::TerminationReason::NotTerminated;
@@ -175,13 +176,24 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
         }
     } post_process;
 
-    // 世代交代処理
-    eax::NagataGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
-    
-    // GA実行オブジェクト
-    mpi::GenerationalChangeModel genetic_algorithm(generational_step, update_func, logging, post_process);
+    auto run_with_step = [&](auto&& generational_step) {
+        mpi::GenerationalChangeModel genetic_algorithm(generational_step, update_func, logging, post_process);
+        return genetic_algorithm.execute(population, context, context.current_generation);
+    };
 
-    auto result = genetic_algorithm.execute(population, context, context.current_generation);
+    std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> result;
+    if (context.env.generation_model == GenerationModel::PseudoMggRoulette) {
+        eax::PseudoMggGenerationChangeModel generational_step(
+            calc_fitness_lambda, crossover_func, eax::PseudoMggOddSelection::Roulette);
+        result = run_with_step(generational_step);
+    } else if (context.env.generation_model == GenerationModel::PseudoMggRanking) {
+        eax::PseudoMggGenerationChangeModel generational_step(
+            calc_fitness_lambda, crossover_func, eax::PseudoMggOddSelection::Ranking);
+        result = run_with_step(generational_step);
+    } else {
+        eax::NagataGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
+        result = run_with_step(generational_step);
+    }
     
     if (log_file_stream.is_open()) {
         auto& [reason, final_population] = result;

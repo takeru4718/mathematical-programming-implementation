@@ -26,6 +26,16 @@ namespace eax {
         Ent,
         DistancePreserving,
     };
+
+    // 世代交代モデル
+    // Nagata: 従来EAX（家族から常にエリート生存）
+    // PseudoMggRoulette: 偶数エリート / 奇数ルーレット
+    // PseudoMggRanking: 偶数エリート / 奇数線形ランキング（最悪1:最良3）
+    enum class GenerationModel {
+        Nagata,
+        PseudoMggRoulette,
+        PseudoMggRanking,
+    };
     
     struct Environment {
         tsp::TSP tsp;
@@ -34,6 +44,8 @@ namespace eax {
         SelectionType selection_type;
         std::mt19937::result_type random_seed;
         eax_type_t eax_type;
+        GenerationModel generation_model = GenerationModel::Nagata;
+        size_t max_generations = 10000;
     };
 
     struct Context {
