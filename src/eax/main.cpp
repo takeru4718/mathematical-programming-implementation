@@ -277,7 +277,8 @@ int main(int argc, char* argv[])
     generation_model_spec.set_description("--generation-model <type> \t:Generation change model. "
                                           "'nagata' (default) always selects the elite from the family (children + parent A); "
                                           "'pseudo-mgg-roulette' selects elite on even loop indices and roulette on odd indices; "
-                                          "'pseudo-mgg-ranking' selects elite on even indices and linear ranking (worst:best = 1:3) on odd indices.");
+                                          "'pseudo-mgg-ranking' selects elite on even indices and linear ranking (worst:best = 1:3) on odd indices. "
+                                          "Both pseudo-mgg variants protect population-best parent A by forcing elite selection.");
     parser.add_argument(generation_model_spec);
 
     mpi::ArgumentSpec max_generations_spec(args.max_generations);

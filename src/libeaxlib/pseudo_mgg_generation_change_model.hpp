@@ -24,8 +24,9 @@ enum class PseudoMggOddSelection {
  *          - 偶数: 家族（子 + 親A）からエリート選択
  *          - 奇数: 家族（子 + 親A）からルーレット or ランキング選択
  *          で parent A を置換する。
+ *          ただし親Aが現集団の最良長（同率含む）をもつ場合は、
+ *          奇数番でもエリート選択に強制する（集団最良保護）。
  *          適応度計算は FitnessFunc に委譲（実験では greedy を想定）。
- *          集団最良保護は未実装（保留）。
  */
 template <typename FitnessFunc, typename CrossOverFunc>
 class PseudoMggGenerationChangeModel
@@ -41,6 +42,7 @@ public:
         requires(requires(std::vector<Individual> population, FitnessFunc fitness_func, CrossOverFunc cross_over, Context context) {
             { fitness_func(cross_over(population[0], population[1], context)[0], context) } -> std::convertible_to<double>;
             population[0] = cross_over(population[0], population[1], context)[0];
+            { population[0].get_distance() } -> std::convertible_to<double>;
             context.random_gen;
         } && std::uniform_random_bit_generator<decltype(Context::random_gen)>)
     void operator()(std::vector<Individual>& population, Context& context)
@@ -79,15 +81,15 @@ public:
             children.emplace_back(parent_A);
             std::vector<double> family_fitness = calc_all_fitness(children, context, fitness_func);
 
+            // 集団最良保護: 親Aが現集団最良（同率含む）なら奇数番でもエリート
+            const bool protect_best = is_population_best(population, parent_A_index);
+
             size_t selected_index = 0;
-            if (i % 2 == 0) {
-                // 偶数番ループ: エリート選択
+            if (i % 2 == 0 || protect_best) {
                 selected_index = select_elite(family_fitness);
             } else if (odd_selection == PseudoMggOddSelection::Ranking) {
-                // 奇数番ループ: 線形ランキング選択（最悪1 : 最良3）
                 selected_index = select_ranking(family_fitness, context.random_gen);
             } else {
-                // 奇数番ループ: ルーレット選択
                 selected_index = select_roulette(family_fitness, context.random_gen);
             }
 
@@ -96,6 +98,18 @@ public:
     }
 
 private:
+    template <typename Individual>
+    static bool is_population_best(const std::vector<Individual>& population, size_t index)
+    {
+        const auto target = population[index].get_distance();
+        for (size_t j = 0; j < population.size(); ++j) {
+            if (population[j].get_distance() < target) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static size_t select_elite(const std::vector<double>& fitness_values)
     {
         size_t best_index = 0;
