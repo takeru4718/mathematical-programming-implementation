@@ -48,7 +48,7 @@ struct Arguments {
     // 評価関数の種類（生存選択の適応度）
     std::string selection_type_str = "ent"; // "greedy", "ent", or "distance"
     // 世代交代モデル（家族からの生存個体の選び方）
-    std::string generation_model_str = "nagata"; // "nagata" or "pseudo-mgg"
+    std::string generation_model_str = "nagata"; // "nagata", "pseudo-mgg-roulette", or "pseudo-mgg-ranking"
     // 最大世代数
     size_t max_generations = 10000;
     // 交叉手法
@@ -89,8 +89,11 @@ void print_result(const eax::Context& context, std::ostream& os, mpi::genetic_al
         case eax::GenerationModel::Nagata:
             os << "nagata";
             break;
-        case eax::GenerationModel::PseudoMgg:
-            os << "pseudo-mgg";
+        case eax::GenerationModel::PseudoMggRoulette:
+            os << "pseudo-mgg-roulette";
+            break;
+        case eax::GenerationModel::PseudoMggRanking:
+            os << "pseudo-mgg-ranking";
             break;
         default:
             os << "unknown";
@@ -142,10 +145,18 @@ void execute_normal(const Arguments& args)
     eax::GenerationModel generation_model = eax::GenerationModel::Nagata;
     if (args.generation_model_str == "nagata") {
         generation_model = eax::GenerationModel::Nagata;
-    } else if (args.generation_model_str == "pseudo-mgg" || args.generation_model_str == "pseudo_mgg") {
-        generation_model = eax::GenerationModel::PseudoMgg;
+    } else if (args.generation_model_str == "pseudo-mgg-roulette" ||
+               args.generation_model_str == "pseudo_mgg_roulette" ||
+               args.generation_model_str == "pseudo-mgg" ||
+               args.generation_model_str == "pseudo_mgg") {
+        // pseudo-mgg は後方互換のため roulette 扱い
+        generation_model = eax::GenerationModel::PseudoMggRoulette;
+    } else if (args.generation_model_str == "pseudo-mgg-ranking" ||
+               args.generation_model_str == "pseudo_mgg_ranking") {
+        generation_model = eax::GenerationModel::PseudoMggRanking;
     } else {
-        throw std::runtime_error("Unknown generation model '" + args.generation_model_str + "'. Options are 'nagata' or 'pseudo-mgg'.");
+        throw std::runtime_error("Unknown generation model '" + args.generation_model_str +
+                                 "'. Options are 'nagata', 'pseudo-mgg-roulette', or 'pseudo-mgg-ranking'.");
     }
 
     tsp::TSP tsp = tsp::TSP_Loader::load_tsp(args.file_name);
@@ -265,7 +276,8 @@ int main(int argc, char* argv[])
     generation_model_spec.add_argument_name("--generation-model");
     generation_model_spec.set_description("--generation-model <type> \t:Generation change model. "
                                           "'nagata' (default) always selects the elite from the family (children + parent A); "
-                                          "'pseudo-mgg' selects elite on even loop indices and roulette on odd loop indices.");
+                                          "'pseudo-mgg-roulette' selects elite on even loop indices and roulette on odd indices; "
+                                          "'pseudo-mgg-ranking' selects elite on even indices and linear ranking (worst:best = 1:3) on odd indices.");
     parser.add_argument(generation_model_spec);
 
     mpi::ArgumentSpec max_generations_spec(args.max_generations);

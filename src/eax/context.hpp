@@ -29,10 +29,12 @@ namespace eax {
 
     // 世代交代モデル
     // Nagata: 従来EAX（家族から常にエリート生存）
-    // PseudoMgg: 家族（子+親A）から、ループ偶数番はエリート / 奇数番はルーレットで生存選択
+    // PseudoMggRoulette: 偶数エリート / 奇数ルーレット
+    // PseudoMggRanking: 偶数エリート / 奇数線形ランキング（最悪1:最良3）
     enum class GenerationModel {
         Nagata,
-        PseudoMgg,
+        PseudoMggRoulette,
+        PseudoMggRanking,
     };
     
     struct Environment {

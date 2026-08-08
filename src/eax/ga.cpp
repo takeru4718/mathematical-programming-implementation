@@ -182,8 +182,13 @@ std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> ex
     };
 
     std::pair<mpi::genetic_algorithm::TerminationReason, std::vector<Individual>> result;
-    if (context.env.generation_model == GenerationModel::PseudoMgg) {
-        eax::PseudoMggGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
+    if (context.env.generation_model == GenerationModel::PseudoMggRoulette) {
+        eax::PseudoMggGenerationChangeModel generational_step(
+            calc_fitness_lambda, crossover_func, eax::PseudoMggOddSelection::Roulette);
+        result = run_with_step(generational_step);
+    } else if (context.env.generation_model == GenerationModel::PseudoMggRanking) {
+        eax::PseudoMggGenerationChangeModel generational_step(
+            calc_fitness_lambda, crossover_func, eax::PseudoMggOddSelection::Ranking);
         result = run_with_step(generational_step);
     } else {
         eax::NagataGenerationChangeModel generational_step(calc_fitness_lambda, crossover_func);
